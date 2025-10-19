@@ -27,7 +27,6 @@
             backdrop-filter: blur(12px);
             -webkit-backdrop-filter: blur(12px);
             border: 1px solid rgba(255, 255, 255, 0.1);
-            min-height: 650px;
         }
         .storyboard-header {
             cursor: move;
@@ -191,6 +190,17 @@
             </div>
         </div>
         
+         <div id="execute-confirm-modal" class="modal-backdrop fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden opacity-0">
+            <div class="modal-content bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 transform scale-95">
+                <h3 class="text-xl font-semibold mb-4">执行预览</h3>
+                <p class="text-gray-300 mb-6">播放器仅提供画面预览，如需要执行视频生成任务，需要先对接视频生成的API。</p>
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-execute" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition">取消</button>
+                    <button id="confirm-execute" class="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition">确认执行</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <script type="module">
@@ -199,9 +209,13 @@
         const canvas = getEl('canvas'), canvasContainer = getEl('canvas-container');
         const promptInput = getEl('prompt-input'), generateBtn = getEl('generate-btn');
         const zoomInBtn = getEl('zoom-in'), zoomOutBtn = getEl('zoom-out'), resetViewBtn = getEl('reset-view');
+        
         const modifyModal = getEl('modify-modal'), modalImgPreview = getEl('modal-img-preview');
         const modifyPromptInput = getEl('modify-prompt'), cancelModifyBtn = getEl('cancel-modify'), confirmModifyBtn = getEl('confirm-modify');
         
+        const executeConfirmModal = getEl('execute-confirm-modal');
+        const cancelExecuteBtn = getEl('cancel-execute'), confirmExecuteBtn = getEl('confirm-execute');
+
         const uploadCharacterInput = getEl('upload-character-input');
         const characterRefCapsule = getEl('character-ref-capsule');
         
@@ -216,6 +230,7 @@
             pan: { x: 0, y: 0 }, zoom: 1, isPanning: false, panStart: { x: 0, y: 0 },
             storyboards: [], nextStoryboardId: 0, nextCardId: 0,
             activeModifyCardId: null,
+            activeExecuteStoryboardId: null,
             characterReferenceImage: null, sceneReferenceImage: null,
             isConnecting: false, connectionStart: null,
             playbackIntervals: {}, // Store interval IDs for each player
@@ -339,7 +354,6 @@
                         sourceY = (img.height - sourceHeight) / 2;
                     }
                     
-                    // Use a reasonable but not excessive resolution for the crop canvas
                     canvas.width = 1920;
                     canvas.height = 1080;
 
@@ -523,6 +537,9 @@
                         <button data-storyboard-id="${storyboardData.id}" class="download-storyboard-btn bg-green-600 hover:bg-green-700 text-white font-bold h-8 w-8 rounded-lg flex items-center justify-center transition">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
                         </button>
+                        <button data-storyboard-id="${storyboardData.id}" class="close-storyboard-btn bg-red-600 hover:bg-red-700 text-white font-bold h-8 w-8 rounded-lg flex items-center justify-center transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/></svg>
+                        </button>
                     </div>
                 </div>
                 <div class="flex-grow flex">
@@ -570,9 +587,26 @@
             state.storyboards.forEach(sbData => {
                 const storyboardEl = createStoryboardElement(sbData);
                 canvas.appendChild(storyboardEl);
+
+                const contentArea = storyboardEl.querySelector('.storyboard-shot-panel');
+                const header = storyboardEl.querySelector('.storyboard-header');
+                let maxBottomY = 0;
+                const cardElements = contentArea.querySelectorAll('.card');
+                
+                if(cardElements.length > 0) {
+                    cardElements.forEach(cardEl => {
+                        const bottomEdge = cardEl.offsetTop + cardEl.offsetHeight;
+                        if (bottomEdge > maxBottomY) {
+                            maxBottomY = bottomEdge;
+                        }
+                    });
+                     const newHeight = header.offsetHeight + maxBottomY + 20; // 20 for bottom padding
+                    storyboardEl.style.height = `${newHeight}px`;
+                }
             });
             renderAllConnections();
         }
+
 
         function getConnectorPosition(cardId, type, storyboardEl) {
             const cardEl = storyboardEl.querySelector(`#card-${cardId}`);
@@ -920,6 +954,10 @@
                 if (btn.classList.contains('expand-script-btn')) {
                      handleCardAction(null, 'toggle-script', {storyboard});
                 }
+                 if (btn.classList.contains('close-storyboard-btn')) {
+                    state.storyboards = state.storyboards.filter(sb => sb.id !== storyboardId);
+                    renderStoryboards();
+                }
             }
 
             if (btn.classList.contains('download-storyboard-btn')) {
@@ -961,38 +999,52 @@
 
             if (btn.classList.contains('execute-storyboard-btn')) {
                 const storyboardId = parseInt(btn.dataset.storyboardId, 10);
-                const storyboard = state.storyboards.find(sb => sb.id === storyboardId);
-                if (!storyboard) return;
-
-                const playerCard = storyboard.cards.find(c => c.type === 'player');
-                if (!playerCard) return;
-
-                const playlist = [];
-                let currentNodeId = playerCard.id;
-
-                while (currentNodeId !== undefined) {
-                    const incomingConnection = storyboard.connections.find(c => c.to === currentNodeId);
-                    if (!incomingConnection) break;
-
-                    const fromCard = storyboard.cards.find(c => c.id === incomingConnection.from);
-                    if (fromCard && fromCard.type === 'image' && fromCard.imageUrl) {
-                        playlist.unshift(fromCard);
-                    }
-                    currentNodeId = incomingConnection.from;
-                }
-                
-                if (playlist.length > 0) {
-                    playerCard.isReady = true;
-                    playerCard.playlist = playlist;
-                    playerCard.thumbnailUrl = playlist[0].imageUrl;
-                } else {
-                    playerCard.isReady = false;
-                    playerCard.playlist = [];
-                    playerCard.thumbnailUrl = null;
-                }
-                updateCard(playerCard.id, playerCard);
+                state.activeExecuteStoryboardId = storyboardId;
+                executeConfirmModal.classList.remove('hidden');
+                setTimeout(() => {
+                    executeConfirmModal.classList.remove('opacity-0');
+                    executeConfirmModal.querySelector('.modal-content').classList.remove('scale-95');
+                }, 10);
             }
         });
+
+        confirmExecuteBtn.addEventListener('click', () => {
+            const storyboardId = state.activeExecuteStoryboardId;
+            if(storyboardId === null) return;
+
+            const storyboard = state.storyboards.find(sb => sb.id === storyboardId);
+            if (!storyboard) return;
+
+            const playerCard = storyboard.cards.find(c => c.type === 'player');
+            if (!playerCard) return;
+
+            const playlist = [];
+            let currentNodeId = playerCard.id;
+
+            while (currentNodeId !== undefined) {
+                const incomingConnection = storyboard.connections.find(c => c.to === currentNodeId);
+                if (!incomingConnection) break;
+
+                const fromCard = storyboard.cards.find(c => c.id === incomingConnection.from);
+                if (fromCard && fromCard.type === 'image' && fromCard.imageUrl) {
+                    playlist.unshift(fromCard);
+                }
+                currentNodeId = incomingConnection.from;
+            }
+            
+            if (playlist.length > 0) {
+                playerCard.isReady = true;
+                playerCard.playlist = playlist;
+                playerCard.thumbnailUrl = playlist[0].imageUrl;
+            } else {
+                playerCard.isReady = false;
+                playerCard.playlist = [];
+                playerCard.thumbnailUrl = null;
+            }
+            updateCard(playerCard.id, playerCard);
+            closeExecuteModal();
+        });
+
 
         // --- Connection Drag Handling ---
         canvas.addEventListener('mousedown', e => {
@@ -1096,6 +1148,16 @@
         resetViewBtn.addEventListener('click', () => { state.zoom = 1; state.pan.x = 0; state.pan.y = 0; updateCanvasTransform(); });
         
         // Modal controls
+        function closeExecuteModal() {
+             executeConfirmModal.querySelector('.modal-content').classList.add('scale-95');
+            executeConfirmModal.classList.add('opacity-0');
+            setTimeout(() => {
+                executeConfirmModal.classList.add('hidden');
+                state.activeExecuteStoryboardId = null;
+            }, 300);
+        }
+        cancelExecuteBtn.addEventListener('click', closeExecuteModal);
+
         function closeModal() {
             modifyModal.querySelector('.modal-content').classList.add('scale-95');
             modifyModal.classList.add('opacity-0');
