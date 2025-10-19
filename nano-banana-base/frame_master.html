@@ -1,0 +1,1148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>剧本大师无限画布</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #111827;
+            color: #f3f4f6;
+        }
+        #canvas-container {
+            background-image: radial-gradient(#4b5563 1px, transparent 0);
+            background-size: 20px 20px;
+            cursor: grab;
+        }
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+        .storyboard-container {
+            background: rgba(31, 41, 55, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-height: 650px;
+        }
+        .storyboard-header {
+            cursor: move;
+        }
+        .storyboard-topic-panel {
+            background-color: rgba(17, 24, 39, 0.5);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .card {
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            cursor: grab;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .card.dragging {
+            cursor: grabbing;
+            z-index: 1000;
+        }
+        .loader {
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .modal-backdrop { transition: opacity 0.3s ease; }
+        .modal-content { transition: transform 0.3s ease; }
+        .ref-capsule {
+            transition: all 0.2s ease-in-out;
+            background-size: cover;
+            background-position: center;
+        }
+        .ref-capsule .clear-btn { opacity: 0; transition: opacity 0.2s ease-in-out; }
+        .ref-capsule:hover .clear-btn { opacity: 1; }
+        .breathing-gradient {
+            background: linear-gradient(90deg, #3b82f6, #a855f7, #3b82f6);
+            background-size: 200% 200%;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            animation: breathing-gradient-animation 4s ease infinite;
+        }
+        @keyframes breathing-gradient-animation {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .connector-dot {
+            transition: all 0.2s ease;
+        }
+        .connector-dot:hover {
+            transform: scale(1.5);
+            background-color: #3b82f6;
+        }
+        .connection-path {
+            stroke-width: 3px;
+            stroke: rgba(167, 139, 250, 0.6);
+            fill: none;
+            transition: stroke 0.2s;
+        }
+        .connection-path:hover {
+            stroke: rgba(236, 72, 153, 1);
+            cursor: pointer;
+        }
+        .player-connection-path {
+            stroke: #3b82f6;
+            stroke-width: 4px;
+        }
+        .player-card-play-button {
+            transition: all 0.2s ease;
+        }
+        .player-card-play-button:hover {
+            transform: scale(1.1);
+            color: #fff;
+        }
+        .description-content, .script-content {
+            transition: max-height 0.3s ease-in-out;
+            max-height: 0;
+            overflow: hidden;
+        }
+        .description-content.expanded, .script-content.expanded {
+            max-height: 1000px; /* Or a sufficiently large value */
+        }
+        .expand-arrow {
+             transition: transform 0.3s ease;
+        }
+         .expanded .expand-arrow {
+            transform: rotate(180deg);
+        }
+    </style>
+</head>
+<body class="w-screen h-screen m-0 p-0">
+
+    <div id="app" class="relative w-full h-full">
+        <div id="canvas-container" class="absolute top-0 left-0 w-full h-full">
+            <div id="canvas" class="relative" style="transform-origin: 0 0;"></div>
+        </div>
+
+        <!-- Bottom Controls Area -->
+        <div class="absolute bottom-5 left-1/2 -translate-x-1/2 w-full max-w-4xl px-4 z-20">
+            <div id="thinking-indicator" class="hidden text-center mb-2">
+                <p class="text-lg font-semibold breathing-gradient">思考中...</p>
+            </div>
+            <div id="bottom-controls" class="bg-gray-900/70 backdrop-blur-lg rounded-full shadow-2xl flex items-center h-16 transition-opacity duration-300 overflow-hidden border border-gray-700">
+                <input id="upload-character-input" type="file" accept="image/*" class="hidden">
+                <div id="character-ref-capsule" class="ref-capsule h-full w-32 flex-shrink-0 flex items-center justify-center text-gray-400 relative cursor-pointer hover:bg-white/10 transition-colors">
+                    <div class="flex items-center space-x-2 pointer-events-none">
+                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1H3zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/></svg>
+                        <span class="text-xs font-semibold">角色</span>
+                    </div>
+                    <button class="clear-btn hidden absolute top-1 right-1 bg-red-600/80 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs z-10">&times;</button>
+                </div>
+                
+                <div class="w-px h-8 bg-gray-600"></div>
+
+                <input id="upload-scene-input" type="file" accept="image/*" class="hidden">
+                 <div id="scene-ref-capsule" class="ref-capsule h-full w-32 flex-shrink-0 flex items-center justify-center text-gray-400 relative cursor-pointer hover:bg-white/10 transition-colors">
+                    <div class="flex items-center space-x-2 pointer-events-none">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M4.502 9a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3z"/><path d="M14.002 13a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2V5A2 2 0 0 1 2 3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2zM15 5a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V5z"/></svg>
+                        <span class="text-xs font-semibold">场景</span>
+                    </div>
+                    <button class="clear-btn hidden absolute top-1 right-1 bg-red-600/80 hover:bg-red-700 text-white rounded-full w-5 h-5 flex items-center justify-center font-bold text-xs z-10">&times;</button>
+                </div>
+
+                <div class="w-px h-8 bg-gray-600"></div>
+                
+                <input id="prompt-input" type="text" placeholder="输入剧本主题，例如“一个侦探故事，分6个镜头”" class="bg-transparent text-white placeholder-gray-400 text-base px-6 h-full w-full focus:ring-0 focus:outline-none">
+                
+                <button id="generate-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold h-full px-6 flex-shrink-0 flex items-center transition whitespace-nowrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M12 2a10 10 0 1 1-7.07 17.07"/><path d="M12 2a10 10 0 0 0-7.07 17.07"/><path d="m12 2 4 4"/><path d="m22 12-4-4"/><path d="M12 22 8 18"/><path d="m2 12 4 4"/></svg>
+                    <span>生成</span>
+                </button>
+            </div>
+        </div>
+        
+        <div class="absolute bottom-4 right-4 flex flex-col space-y-2 z-10">
+            <button id="zoom-in" class="w-10 h-10 bg-gray-800/80 backdrop-blur-sm rounded-full flex items-center justify-center text-xl hover:bg-gray-700 transition">+</button>
+            <button id="zoom-out" class="w-10 h-10 bg-gray-800/80 backdrop-blur-sm rounded-full flex items-center justify-center text-xl hover:bg-gray-700 transition">-</button>
+            <button id="reset-view" class="w-10 h-10 bg-gray-800/80 backdrop-blur-sm rounded-full flex items-center justify-center text-sm hover:bg-gray-700 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 2v6h6"/><path d="M21 12A9 9 0 0 0 6 5.3L3 8"/><path d="M21 22v-6h-6"/><path d="M3 12a9 9 0 0 0 15 6.7l3-2.7"/></svg>
+            </button>
+        </div>
+        
+        <div id="modify-modal" class="modal-backdrop fixed inset-0 bg-black/60 flex items-center justify-center z-50 hidden opacity-0">
+            <div class="modal-content bg-gray-800 rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 transform scale-95">
+                <h3 class="text-xl font-semibold mb-4">修改图片</h3>
+                <p class="text-gray-400 mb-4">输入您想如何修改这张图片，例如“改为夜晚”，“添加一只猫”。</p>
+                <img id="modal-img-preview" src="" class="w-full h-48 object-cover rounded-lg mb-4 bg-gray-700">
+                <input id="modify-prompt" type="text" placeholder="输入修改指令..." class="bg-gray-700 text-white placeholder-gray-400 border border-gray-600 rounded-lg px-4 py-2 w-full focus:ring-2 focus:ring-blue-500 focus:outline-none transition mb-4">
+                <div class="flex justify-end space-x-3">
+                    <button id="cancel-modify" class="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg transition">取消</button>
+                    <button id="confirm-modify" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg transition">确认修改</button>
+                </div>
+            </div>
+        </div>
+        
+    </div>
+
+    <script type="module">
+        // --- DOM Elements ---
+        const getEl = (id) => document.getElementById(id);
+        const canvas = getEl('canvas'), canvasContainer = getEl('canvas-container');
+        const promptInput = getEl('prompt-input'), generateBtn = getEl('generate-btn');
+        const zoomInBtn = getEl('zoom-in'), zoomOutBtn = getEl('zoom-out'), resetViewBtn = getEl('reset-view');
+        const modifyModal = getEl('modify-modal'), modalImgPreview = getEl('modal-img-preview');
+        const modifyPromptInput = getEl('modify-prompt'), cancelModifyBtn = getEl('cancel-modify'), confirmModifyBtn = getEl('confirm-modify');
+        
+        const uploadCharacterInput = getEl('upload-character-input');
+        const characterRefCapsule = getEl('character-ref-capsule');
+        
+        const uploadSceneInput = getEl('upload-scene-input');
+        const sceneRefCapsule = getEl('scene-ref-capsule');
+
+        const bottomControls = getEl('bottom-controls');
+        const thinkingIndicator = getEl('thinking-indicator');
+
+        // --- State Management ---
+        let state = {
+            pan: { x: 0, y: 0 }, zoom: 1, isPanning: false, panStart: { x: 0, y: 0 },
+            storyboards: [], nextStoryboardId: 0, nextCardId: 0,
+            activeModifyCardId: null,
+            characterReferenceImage: null, sceneReferenceImage: null,
+            isConnecting: false, connectionStart: null,
+            playbackIntervals: {}, // Store interval IDs for each player
+        };
+        
+        // --- API & System Prompt Configuration ---
+        const apiKey = ""; // Left empty for automatic injection
+        const BASE_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/`;
+        const TEXT_MODEL = "gemini-2.5-flash-preview-05-20";
+        const IMAGE_MODEL = "gemini-2.5-flash-image-preview";
+
+        const SYSTEM_PROMPT = `You are a world-class film director's assistant. Your task is to interpret a user's script idea, break it down into a series of distinct storyboard shots, and then weave those shots into a cohesive script.
+        - Analyze the user's prompt to determine the number of shots.
+        - For each shot, generate: 1. A concise, descriptive title. 2. A string describing the camera movement (e.g., "Wide Shot, Pan Right", "Close-up, Dolly Zoom"). 3. A detailed prompt for image generation.
+        - After defining all shots, write a cohesive, narrative script in a single block of text that combines all the shot descriptions.
+        - You MUST return a single JSON object with two keys: "scriptText" (the full narrative script as a string) and "shots" (an array of objects, where each object has "title", "cameraMovement", and "prompt" keys).
+        Example: {"scriptText": "The story opens on a rain-slicked street...", "shots": [{"title": "Shot 1: The Arrival", "cameraMovement": "Wide Shot, Crane Down", "prompt": "A wide shot of a futuristic city at night..."}, {"title": "Shot 2: The Detective", "cameraMovement": "Extreme Close-up", "prompt": "Extreme close-up on a detective's face..."}]}`;
+
+        // --- Core Application Logic ---
+
+        async function callAPI(model, payload) {
+            const url = `${BASE_API_URL}${model}:generateContent?key=${apiKey}`;
+            let retries = 3;
+            let delay = 1000;
+            while (retries > 0) {
+                try {
+                    const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    return await response.json();
+                } catch (error) {
+                    console.error("API call failed:", error);
+                    retries--;
+                    if (retries === 0) return null;
+                    await new Promise(res => setTimeout(res, delay));
+                    delay *= 2;
+                }
+            }
+        }
+        
+        async function analyzePromptForStoryboards(userPrompt, charImg, sceneImg) {
+            const parts = [{ text: userPrompt }];
+            if (charImg) parts.push({ inlineData: { mimeType: "image/png", data: charImg.split(',')[1] } });
+            if (sceneImg) parts.push({ inlineData: { mimeType: "image/png", data: sceneImg.split(',')[1] } });
+
+            const payload = {
+                contents: [{ parts }],
+                systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+                generationConfig: {
+                    responseMimeType: "application/json",
+                    responseSchema: {
+                        type: "OBJECT",
+                        properties: {
+                            "scriptText": { "type": "STRING" },
+                            "shots": {
+                                "type": "ARRAY",
+                                "items": {
+                                    "type": "OBJECT",
+                                    "properties": {
+                                        "title": { "type": "STRING" },
+                                        "cameraMovement": { "type": "STRING" },
+                                        "prompt": { "type": "STRING" }
+                                    },
+                                    "required": ["title", "cameraMovement", "prompt"]
+                                }
+                            }
+                        },
+                        "required": ["scriptText", "shots"]
+                    }
+                }
+            };
+            const result = await callAPI(TEXT_MODEL, payload);
+            if (result?.candidates?.[0]?.content?.parts?.[0]?.text) {
+                try { return JSON.parse(result.candidates[0].content.parts[0].text); } catch (e) { console.error("JSON parse failed", e); return null; }
+            }
+            return null;
+        }
+
+        async function generateImage(prompt, charImg, sceneImg) {
+            let retries = 3;
+            while (retries > 0) {
+                const parts = [{ text: prompt }];
+                if (charImg) parts.push({ inlineData: { mimeType: "image/png", data: charImg.split(',')[1] } });
+                if (sceneImg) parts.push({ inlineData: { mimeType: "image/png", data: sceneImg.split(',')[1] } });
+                
+                const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
+                const result = await callAPI(IMAGE_MODEL, payload);
+                const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+                if (base64Data) return `data:image/png;base64,${base64Data}`;
+                
+                console.warn(`Image generation failed. Retrying... (${4 - retries}/3)`);
+                retries--;
+                if (retries > 0) await new Promise(res => setTimeout(res, 1500));
+            }
+            console.error(`Image generation failed after 3 attempts.`);
+            return null;
+        }
+
+        async function cropImageTo16x9(imageUrl) {
+            return new Promise((resolve, reject) => {
+                const img = new Image();
+                img.crossOrigin = 'Anonymous';
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+
+                    const targetAspectRatio = 16 / 9;
+                    let sourceX, sourceY, sourceWidth, sourceHeight;
+
+                    const originalAspectRatio = img.width / img.height;
+
+                    if (originalAspectRatio > targetAspectRatio) {
+                        sourceHeight = img.height;
+                        sourceWidth = img.height * targetAspectRatio;
+                        sourceX = (img.width - sourceWidth) / 2;
+                        sourceY = 0;
+                    } else {
+                        sourceWidth = img.width;
+                        sourceHeight = img.width / targetAspectRatio;
+                        sourceX = 0;
+                        sourceY = (img.height - sourceHeight) / 2;
+                    }
+                    
+                    // Use a reasonable but not excessive resolution for the crop canvas
+                    canvas.width = 1920;
+                    canvas.height = 1080;
+
+                    ctx.drawImage(img, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, canvas.width, canvas.height);
+
+                    canvas.toBlob(resolve, 'image/png');
+                };
+                img.onerror = reject;
+                img.src = imageUrl;
+            });
+        }
+
+        // --- UI and Canvas Management ---
+
+        function updateCanvasTransform() {
+            canvas.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+        }
+        
+        function createCardElement(cardData, storyboardEl) {
+            const cardEl = document.createElement('div');
+            cardEl.id = `card-${cardData.id}`;
+            cardEl.style.left = `${cardData.x}px`;
+            cardEl.style.top = `${cardData.y}px`;
+            cardEl.classList.add('select-none'); // Prevent text/image selection
+
+            if (cardData.type === 'player') {
+                 cardEl.className += ' card absolute bg-gray-800 rounded-lg shadow-lg overflow-hidden w-[576px]';
+                 const isReady = cardData.isReady && cardData.playlist.length > 0;
+                 const isPlaying = cardData.isPlaying;
+                 const thumbnailUrl = isPlaying ? cardData.playlist[cardData.currentFrame]?.imageUrl : cardData.thumbnailUrl;
+
+                 cardEl.innerHTML = `
+                    <div data-connector-type="in" class="connector-dot absolute -left-2 top-4 w-4 h-4 bg-gray-500 rounded-full border-2 border-gray-800 z-10"></div>
+                    <div class="image-container w-full h-96 bg-gray-900 flex items-center justify-center relative group">
+                        ${isReady ? `<img src="${thumbnailUrl}" class="w-full h-full object-cover">` : `<span class="text-gray-500">未执行</span>`}
+                        <div class="absolute inset-0 bg-black/30 flex items-center justify-center">
+                            <button data-action="play" class="player-card-play-button text-gray-400 ${isReady ? '' : 'opacity-50 cursor-not-allowed'}" ${!isReady ? 'disabled' : ''}>
+                                ${isPlaying ? 
+                                    `<div class="opacity-0 group-hover:opacity-100 transition-opacity">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="currentColor" viewBox="0 0 16 16"><path d="M5.5 3.5A1.5 1.5 0 0 1 7 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5zm5 0A1.5 1.5 0 0 1 12 5v6a1.5 1.5 0 0 1-3 0V5a1.5 1.5 0 0 1 1.5-1.5z"/></svg>
+                                    </div>` :
+                                    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" fill="currentColor" viewBox="0 0 16 16"><path d="M10.804 8 5 4.633v6.734L10.804 8zM0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8zm15 0a7 7 0 1 0-14 0 7 7 0 0 0 14 0z"/></svg>`
+                                }
+                            </button>
+                        </div>
+                    </div>
+                    <div class="p-3 bg-gray-900/50">
+                        <h3 class="font-semibold text-white truncate">播放器</h3>
+                        <p class="text-xs text-gray-400">连接卡片并点击执行</p>
+                    </div>
+                 `;
+            } else { // Image card
+                cardEl.className += ' card absolute w-72 bg-gray-800 rounded-lg shadow-lg overflow-hidden';
+                const isFailed = !cardData.isLoading && !cardData.imageUrl;
+                
+                let bottomBarHtml = isFailed ? `
+                    <div class="p-3 bg-gray-900/50 flex justify-center items-center text-xs space-x-4">
+                        <button data-action="retry" class="action-btn text-yellow-400 hover:text-yellow-300 font-semibold transition">重试</button>
+                        <button data-action="delete" class="action-btn hover:text-red-400 transition">删除</button>
+                    </div>` : `
+                    <div class="p-3 bg-gray-900/50 flex justify-between items-center text-xs">
+                        <button data-action="modify" class="action-btn hover:text-blue-400 transition">修改</button>
+                        <button data-action="similar" class="action-btn hover:text-green-400 transition">相似</button>
+                        <button data-action="delete" class="action-btn hover:text-red-400 transition">删除</button>
+                    </div>`;
+
+                cardEl.innerHTML = `
+                    <div data-connector-type="in" class="connector-dot absolute -left-2 top-4 w-4 h-4 bg-gray-500 rounded-full border-2 border-gray-800 z-10"></div>
+                    <div data-connector-type="out" class="connector-dot absolute -right-2 top-4 w-4 h-4 bg-gray-500 rounded-full border-2 border-gray-800 z-10"></div>
+                    <div class="image-container w-full h-48 bg-gray-700 flex items-center justify-center">
+                        ${cardData.isLoading ? '<div class="loader"></div>' : (cardData.imageUrl ? `<img src="${cardData.imageUrl}" class="w-full h-full object-cover">` : `<span class="text-red-400 text-sm p-2 text-center">生成失败<br/>(可修改提示词后重试)</span>`)}
+                    </div>
+                    <div class="p-3">
+                        <div class="flex justify-between items-center mb-1">
+                             <h3 class="font-semibold text-white truncate">${cardData.title || '分镜'}</h3>
+                             <button data-action="toggle-prompt" class="expand-prompt-btn text-gray-400 hover:text-white">
+                                <svg class="expand-arrow w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                             </button>
+                        </div>
+                        ${cardData.cameraMovement ? `<div class="flex items-center text-xs text-gray-400 mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" class="mr-2" viewBox="0 0 16 16"><path d="M0 5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.983 1.738l3.11-1.382A1 1 0 0 1 16 4.269v7.462a1 1 0 0 1-1.406.913l-3.111-1.382A2 2 0 0 1 9.5 13H2a2 2 0 0 1-2-2V5z"/></svg>
+                                <span>${cardData.cameraMovement}</span>
+                            </div>` : ''}
+                        <div class="description-content">
+                            <p class="description-text bg-gray-900/50 p-2 rounded-md text-gray-300 text-sm">${cardData.description}</p>
+                        </div>
+                    </div>
+                    ${bottomBarHtml}`;
+                
+                 if(isFailed) {
+                    setTimeout(() => {
+                        const wrapper = cardEl.querySelector('.description-content');
+                        if (wrapper) {
+                            wrapper.classList.add('expanded'); // Auto-expand prompt for failed cards
+                            wrapper.innerHTML = `<textarea class="description-area bg-gray-900/50 p-2 rounded-md text-gray-300 text-sm w-full h-24 resize-none focus:outline-none focus:ring-1 focus:ring-yellow-400" >${cardData.description}</textarea>`;
+                        }
+                    }, 0);
+                }
+            }
+            
+            // --- Dragging & Interaction Logic ---
+            let isDragging = false, dragStart = { x: 0, y: 0 };
+            const shotPanel = storyboardEl.querySelector('.storyboard-shot-panel');
+
+            cardEl.addEventListener('mousedown', (e) => {
+                if (e.target.closest('button') || e.target.closest('.connector-dot') || e.target.closest('.description-content')) return;
+                e.preventDefault(); // Prevent default browser drag on image
+                e.stopPropagation();
+                isDragging = true;
+                cardEl.classList.add('dragging');
+                dragStart.x = e.clientX / state.zoom - cardData.x;
+                dragStart.y = e.clientY / state.zoom - cardData.y;
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                const containerRect = shotPanel.getBoundingClientRect();
+                const cardRect = cardEl.getBoundingClientRect();
+
+                let newX = e.clientX / state.zoom - dragStart.x;
+                let newY = e.clientY / state.zoom - dragStart.y;
+                
+                const minX = 0, minY = 0;
+                const maxX = (containerRect.width / state.zoom) - (cardRect.width / state.zoom);
+                const maxY = (containerRect.height / state.zoom) - (cardRect.height / state.zoom);
+
+                cardData.x = Math.max(minX, Math.min(newX, maxX));
+                cardData.y = Math.max(minY, Math.min(newY, maxY));
+                
+                cardEl.style.left = `${cardData.x}px`;
+                cardEl.style.top = `${cardData.y}px`;
+                renderConnectionsFor(storyboardEl, findStoryboardByCardId(cardData.id));
+            });
+
+            window.addEventListener('mouseup', () => { if(isDragging) { isDragging = false; cardEl.classList.remove('dragging'); }});
+            
+            cardEl.addEventListener('click', (e) => {
+                const action = e.target.closest('[data-action]')?.dataset.action;
+                if (action) {
+                     e.stopPropagation();
+                    handleCardAction(cardData.id, action, cardData);
+                }
+            });
+            return cardEl;
+        }
+
+        function createStoryboardElement(storyboardData) {
+            const storyboardEl = document.createElement('div');
+            storyboardEl.id = `storyboard-${storyboardData.id}`;
+            storyboardEl.className = 'storyboard-container absolute rounded-2xl shadow-2xl flex flex-col select-none'; // Prevent text/image selection
+            storyboardEl.style.left = `${storyboardData.x}px`;
+            storyboardEl.style.top = `${storyboardData.y}px`;
+            storyboardEl.style.width = `${storyboardData.width}px`;
+
+            let charRefHtml = '', sceneRefHtml = '', scriptHtml = '';
+            if (storyboardData.characterReferenceImage) {
+                charRefHtml = `<h4 class="text-sm font-semibold text-gray-400 mt-3 mb-2">角色参考</h4><img src="${storyboardData.characterReferenceImage}" class="w-full h-auto object-cover rounded-md">`;
+            }
+            if (storyboardData.sceneReferenceImage) {
+                sceneRefHtml = `<h4 class="text-sm font-semibold text-gray-400 mt-3 mb-2">场景参考</h4><img src="${storyboardData.sceneReferenceImage}" class="w-full h-auto object-cover rounded-md">`;
+            }
+            if (storyboardData.scriptText) {
+                scriptHtml = `
+                    <div class="flex justify-between items-center mt-3 mb-2">
+                        <h4 class="text-sm font-semibold text-gray-400">剧本内容</h4>
+                        <button data-action="toggle-script" class="expand-script-btn text-gray-400 hover:text-white">
+                           <svg class="expand-arrow w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+                        </button>
+                    </div>
+                    <div class="script-content">
+                        <p class="text-gray-300 text-sm whitespace-pre-wrap">${storyboardData.scriptText}</p>
+                    </div>
+                `;
+            }
+
+            storyboardEl.innerHTML = `
+                <div class="storyboard-header bg-gray-900/70 p-3 flex justify-between items-center flex-shrink-0">
+                    <h2 class="font-bold text-white truncate flex-1">${storyboardData.title}</h2>
+                    <div class="flex items-center space-x-2">
+                         <button data-storyboard-id="${storyboardData.id}" class="execute-storyboard-btn bg-purple-600 hover:bg-purple-700 text-white font-bold h-8 px-3 rounded-lg flex items-center justify-center text-sm transition">执行</button>
+                        <button data-storyboard-id="${storyboardData.id}" class="download-storyboard-btn bg-green-600 hover:bg-green-700 text-white font-bold h-8 w-8 rounded-lg flex items-center justify-center transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="flex-grow flex">
+                    <div class="storyboard-topic-panel w-80 p-5 overflow-y-auto flex-shrink-0">
+                        <h3 class="text-base font-semibold text-gray-300 mb-2 border-b border-gray-700 pb-2">主题</h3>
+                        <p class="text-white mb-4">${storyboardData.title}</p>
+                        ${charRefHtml} ${sceneRefHtml} ${scriptHtml}
+                    </div>
+                    <div class="storyboard-shot-panel flex-grow relative p-5">
+                         <svg class="connections-svg absolute top-0 left-0 w-full h-full pointer-events-none"></svg>
+                    </div>
+                </div>
+            `;
+            
+            const shotPanel = storyboardEl.querySelector('.storyboard-shot-panel');
+            storyboardData.cards.forEach(cardData => {
+                shotPanel.appendChild(createCardElement(cardData, storyboardEl));
+            });
+            
+            const header = storyboardEl.querySelector('.storyboard-header');
+            let isDragging = false, dragStart = { x: 0, y: 0 };
+
+            header.addEventListener('mousedown', (e) => {
+                 if (e.target.closest('button')) return;
+                e.stopPropagation();
+                isDragging = true;
+                storyboardEl.style.zIndex = 50;
+                dragStart.x = e.clientX / state.zoom - storyboardData.x;
+                dragStart.y = e.clientY / state.zoom - storyboardData.y;
+            });
+            window.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                storyboardData.x = e.clientX / state.zoom - dragStart.x;
+                storyboardData.y = e.clientY / state.zoom - dragStart.y;
+                storyboardEl.style.left = `${storyboardData.x}px`;
+                storyboardEl.style.top = `${storyboardData.y}px`;
+            });
+            window.addEventListener('mouseup', () => { if (isDragging) { isDragging = false; storyboardEl.style.zIndex = 40; }});
+            
+            return storyboardEl;
+        }
+
+        function renderStoryboards() {
+            canvas.innerHTML = '';
+            state.storyboards.forEach(sbData => {
+                const storyboardEl = createStoryboardElement(sbData);
+                canvas.appendChild(storyboardEl);
+            });
+            renderAllConnections();
+        }
+
+        function getConnectorPosition(cardId, type, storyboardEl) {
+            const cardEl = storyboardEl.querySelector(`#card-${cardId}`);
+            if (!cardEl) return null;
+            const dot = cardEl.querySelector(`[data-connector-type="${type}"]`);
+            if (!dot) return null;
+
+            const shotPanel = storyboardEl.querySelector('.storyboard-shot-panel');
+            const panelRect = shotPanel.getBoundingClientRect();
+            const dotRect = dot.getBoundingClientRect();
+
+            return {
+                x: (dotRect.left - panelRect.left) / state.zoom + (dotRect.width / 2 / state.zoom),
+                y: (dotRect.top - panelRect.top) / state.zoom + (dotRect.height / 2 / state.zoom),
+            };
+        }
+
+        function drawBezierCurve(svg, startPos, endPos, isPlayerConnection) {
+            const dx = Math.abs(startPos.x - endPos.x);
+            const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            const d = `M ${startPos.x} ${startPos.y} C ${startPos.x + dx * 0.5} ${startPos.y}, ${endPos.x - dx * 0.5} ${endPos.y}, ${endPos.x} ${endPos.y}`;
+            path.setAttribute('d', d);
+            path.classList.add('connection-path');
+            if(isPlayerConnection) {
+                path.classList.add('player-connection-path');
+            }
+            svg.appendChild(path);
+            return path;
+        }
+
+        function renderConnectionsFor(storyboardEl, storyboardData) {
+            const svg = storyboardEl.querySelector('.connections-svg');
+            svg.innerHTML = ''; 
+            if (!storyboardData.connections) return;
+
+            const playerCard = storyboardData.cards.find(c => c.type === 'player');
+            
+            storyboardData.connections.forEach(conn => {
+                const startPos = getConnectorPosition(conn.from, 'out', storyboardEl);
+                const endPos = getConnectorPosition(conn.to, 'in', storyboardEl);
+                if (startPos && endPos) {
+                    const isPlayerConnection = playerCard && conn.to === playerCard.id;
+                    const path = drawBezierCurve(svg, startPos, endPos, isPlayerConnection);
+                    path.addEventListener('click', () => {
+                        storyboardData.connections = storyboardData.connections.filter(c => !(c.from === conn.from && c.to === conn.to));
+                        renderConnectionsFor(storyboardEl, storyboardData);
+                    });
+                }
+            });
+        }
+        
+        function renderAllConnections() {
+             state.storyboards.forEach(sbData => {
+                const sbEl = getEl(`storyboard-${sbData.id}`);
+                if (sbEl) renderConnectionsFor(sbEl, sbData);
+            });
+        }
+        
+        function findStoryboardByCardId(cardId) {
+            return state.storyboards.find(sb => sb.cards.some(c => c.id === cardId));
+        }
+
+        function updateCardSurgically(cardId, updates) {
+            const storyboard = findStoryboardByCardId(cardId);
+            if (!storyboard) return;
+            const card = storyboard.cards.find(c => c.id === cardId);
+            if (!card) return;
+
+            Object.assign(card, updates);
+
+            const cardEl = document.getElementById(`card-${cardId}`);
+            if (cardEl) {
+                const storyboardEl = cardEl.closest('.storyboard-container');
+                const newCardEl = createCardElement(card, storyboardEl);
+                cardEl.replaceWith(newCardEl);
+            }
+        }
+
+        function updateCard(cardId, updates) {
+            const storyboard = findStoryboardByCardId(cardId);
+            if (!storyboard) return;
+            const card = storyboard.cards.find(c => c.id === cardId);
+            if (!card) return;
+            Object.assign(card, updates);
+            renderStoryboards();
+        }
+
+
+        function deleteCard(cardId) {
+            const storyboard = findStoryboardByCardId(cardId);
+            if (!storyboard) return;
+            storyboard.cards = storyboard.cards.filter(c => c.id !== cardId);
+            renderStoryboards();
+        }
+        
+        function stopPlayback(playerId) {
+            if (state.playbackIntervals[playerId]) {
+                clearInterval(state.playbackIntervals[playerId]);
+                delete state.playbackIntervals[playerId];
+                const playerCard = findStoryboardByCardId(playerId)?.cards.find(c => c.id === playerId);
+                if (playerCard) {
+                    updateCardSurgically(playerId, { isPlaying: false, currentFrame: 0 });
+                }
+            }
+        }
+
+        async function handleCardAction(id, action, cardData) {
+            const storyboard = id ? findStoryboardByCardId(id) : cardData.storyboard;
+            if (!storyboard) return;
+
+            if (id && cardData.isLoading && action !== 'delete') return;
+            
+            switch (action) {
+                 case 'toggle-script':
+                    const sbEl = getEl(`storyboard-${storyboard.id}`);
+                    const scriptContent = sbEl.querySelector('.script-content');
+                    const scriptBtn = sbEl.querySelector('.expand-script-btn');
+                    if (scriptContent) {
+                        scriptContent.classList.toggle('expanded');
+                        scriptBtn.classList.toggle('expanded');
+                    }
+                    break;
+                case 'toggle-prompt':
+                    const cardEl = getEl(`card-${id}`);
+                    const content = cardEl.querySelector('.description-content');
+                    const btn = cardEl.querySelector('.expand-prompt-btn');
+                    if (content) {
+                        content.classList.toggle('expanded');
+                        btn.classList.toggle('expanded');
+                    }
+                    break;
+                case 'play':
+                    if (cardData.isPlaying) {
+                        stopPlayback(id);
+                    } else {
+                        if (!cardData.isReady || cardData.playlist.length === 0) return;
+                        
+                        updateCardSurgically(id, { isPlaying: true, currentFrame: 0 });
+
+                        state.playbackIntervals[id] = setInterval(() => {
+                            const currentPlayerCard = findStoryboardByCardId(id)?.cards.find(c => c.id === id);
+                            if (!currentPlayerCard || !currentPlayerCard.isPlaying) {
+                                stopPlayback(id);
+                                return;
+                            }
+                            
+                            const nextFrame = currentPlayerCard.currentFrame + 1;
+                            if (nextFrame >= currentPlayerCard.playlist.length) {
+                                stopPlayback(id);
+                            } else {
+                                updateCardSurgically(id, { currentFrame: nextFrame });
+                            }
+                        }, 2000);
+                    }
+                    break;
+                case 'modify':
+                    state.activeModifyCardId = id;
+                    modalImgPreview.src = cardData.imageUrl;
+                    modifyPromptInput.value = '';
+                    modifyModal.classList.remove('hidden');
+                    setTimeout(() => {
+                        modifyModal.classList.remove('opacity-0');
+                        modifyModal.querySelector('.modal-content').classList.remove('scale-95');
+                    }, 10);
+                    break;
+                case 'similar':
+                     const similarCardData = {
+                        id: state.nextCardId++,
+                        x: cardData.x, y: cardData.y + 350, 
+                        title: `相似于: ${cardData.title}`, 
+                        description: cardData.description, 
+                        cameraMovement: cardData.cameraMovement,
+                        isLoading: true,
+                    };
+                    storyboard.cards.push(similarCardData);
+                    renderStoryboards();
+
+                    const newSimilarImg = await generateImage(cardData.description, cardData.imageUrl, null);
+                    if (newSimilarImg) updateCard(similarCardData.id, { imageUrl: newSimilarImg, isLoading: false });
+                    else updateCard(similarCardData.id, { title: '生成失败', isLoading: false });
+                    break;
+                case 'retry':
+                    const failedCardEl = getEl(`card-${id}`);
+                    const newPrompt = failedCardEl.querySelector('.description-area').value;
+                    updateCard(id, { isLoading: true, description: newPrompt });
+                    const retryImgUrl = await generateImage(newPrompt, storyboard.characterReferenceImage, storyboard.sceneReferenceImage);
+                    if(retryImgUrl) {
+                        updateCard(id, { imageUrl: retryImgUrl, isLoading: false });
+                    } else {
+                        updateCard(id, { title: `重试失败`, isLoading: false });
+                    }
+                    break;
+                case 'delete':
+                    deleteCard(id);
+                    break;
+            }
+        }
+        
+        function setThinkingState(isThinking) {
+            if (isThinking) {
+                bottomControls.classList.add('opacity-50', 'pointer-events-none');
+                thinkingIndicator.classList.remove('hidden');
+            } else {
+                bottomControls.classList.remove('opacity-50', 'pointer-events-none');
+                thinkingIndicator.classList.add('hidden');
+            }
+        }
+
+        // --- Event Handlers ---
+        
+        function setupReferenceUploader(capsuleId, inputId, stateKey) {
+            const capsule = getEl(capsuleId);
+            const input = getEl(inputId);
+            const clearBtn = capsule.querySelector('.clear-btn');
+            const placeholder = capsule.querySelector('div');
+
+            function handleFile(file) {
+                if (!file || !file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    state[stateKey] = event.target.result;
+                    capsule.style.backgroundImage = `url('${state[stateKey]}')`;
+                    placeholder.classList.add('hidden');
+                    clearBtn.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+
+            capsule.addEventListener('click', (e) => { if (e.target !== clearBtn) input.click(); });
+            input.addEventListener('change', (e) => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+            ['dragover', 'dragleave', 'drop'].forEach(eventName => {
+                capsule.addEventListener(eventName, e => {
+                    e.preventDefault(); e.stopPropagation();
+                    if (eventName === 'dragover') capsule.classList.add('border-2', 'border-dashed', 'border-blue-500', 'bg-gray-600');
+                    else capsule.classList.remove('border-2', 'border-dashed', 'border-blue-500', 'bg-gray-600');
+                    if (eventName === 'drop' && e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+                });
+            });
+
+            clearBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                state[stateKey] = null;
+                input.value = '';
+                capsule.style.backgroundImage = 'none';
+                placeholder.classList.remove('hidden');
+                clearBtn.classList.add('hidden');
+            });
+        }
+        
+        setupReferenceUploader('character-ref-capsule', 'upload-character-input', 'characterReferenceImage');
+        setupReferenceUploader('scene-ref-capsule', 'upload-scene-input', 'sceneReferenceImage');
+
+        generateBtn.addEventListener('click', async () => {
+            const prompt = promptInput.value;
+            if (!prompt) return;
+
+            setThinkingState(true);
+            const storyboardData = await analyzePromptForStoryboards(prompt, state.characterReferenceImage, state.sceneReferenceImage);
+            setThinkingState(false);
+
+            if (!storyboardData || !storyboardData.shots || storyboardData.shots.length === 0) {
+                alert('无法解析您的剧本，请尝试更清晰的描述。'); return;
+            }
+            
+            const { scriptText, shots: storyboardPrompts } = storyboardData;
+            
+            const CARD_WIDTH = 288, LEFT_PANEL_WIDTH = 320, CARD_GAP = 20, PADDING = 20;
+            const PLAYER_CARD_WIDTH = 576, CARD_HEIGHT_WITH_GAP = 420, CARDS_PER_ROW = 8;
+            
+            const shotPanelWidth = PADDING * 2 + (CARDS_PER_ROW * (CARD_WIDTH + CARD_GAP)) - CARD_GAP;
+            const containerWidth = LEFT_PANEL_WIDTH + shotPanelWidth;
+            
+            let initialX, initialY;
+            if (state.storyboards.length === 0) {
+                initialX = (window.innerWidth / 2 - containerWidth / 2) / state.zoom - state.pan.x / state.zoom;
+                initialY = 100 / state.zoom - state.pan.y / state.zoom;
+            } else {
+                 const rightmostSB = state.storyboards.reduce((p, c) => (p.x > c.x) ? p : c);
+                initialX = rightmostSB.x + rightmostSB.width + 100;
+                initialY = rightmostSB.y;
+            }
+
+            const newStoryboard = {
+                id: state.nextStoryboardId++, title: prompt, x: initialX, y: initialY,
+                width: containerWidth, scriptText,
+                characterReferenceImage: state.characterReferenceImage,
+                sceneReferenceImage: state.sceneReferenceImage,
+                cards: [], connections: [],
+            };
+
+            storyboardPrompts.forEach((shot, index) => {
+                const rowIndex = Math.floor(index / CARDS_PER_ROW);
+                const colIndex = index % CARDS_PER_ROW;
+                 newStoryboard.cards.push({
+                    id: state.nextCardId++, type: 'image',
+                    x: PADDING + (colIndex * (CARD_WIDTH + CARD_GAP)), 
+                    y: PADDING + (rowIndex * CARD_HEIGHT_WITH_GAP),
+                    title: shot.title, description: shot.prompt, cameraMovement: shot.cameraMovement,
+                    isLoading: true,
+                });
+            });
+            
+            const lastShotIndex = storyboardPrompts.length - 1;
+            const lastRow = Math.floor(lastShotIndex / CARDS_PER_ROW);
+            const lastCol = lastShotIndex % CARDS_PER_ROW;
+            let playerX, playerY;
+            if (lastCol < CARDS_PER_ROW - 2) { // Player card takes up 2 slots
+                playerX = PADDING + ((lastCol + 1) * (CARD_WIDTH + CARD_GAP));
+                playerY = PADDING + (lastRow * CARD_HEIGHT_WITH_GAP);
+            } else {
+                playerX = PADDING;
+                playerY = PADDING + ((lastRow + 1) * CARD_HEIGHT_WITH_GAP);
+            }
+
+            newStoryboard.cards.push({
+                id: state.nextCardId++, type: 'player',
+                x: playerX, y: playerY,
+                isReady: false, isPlaying: false, playlist: [], currentFrame: 0, thumbnailUrl: null,
+            });
+
+            state.storyboards.push(newStoryboard);
+            renderStoryboards();
+            promptInput.value = '';
+
+            for (const shotCard of newStoryboard.cards.filter(c => c.type === 'image')) {
+                const imageUrl = await generateImage(shotCard.description, newStoryboard.characterReferenceImage, newStoryboard.sceneReferenceImage);
+                if (imageUrl) {
+                    updateCard(shotCard.id, { imageUrl, isLoading: false });
+                } else {
+                    updateCard(shotCard.id, { title: `${shotCard.title} 生成失败`, isLoading: false });
+                }
+            }
+        });
+
+        canvas.addEventListener('click', async (e) => {
+            const btn = e.target.closest('button');
+            if (!btn) return;
+            
+            const storyboardEl = btn.closest('.storyboard-container');
+            if(storyboardEl) {
+                const storyboardId = parseInt(storyboardEl.id.split('-')[1]);
+                const storyboard = state.storyboards.find(sb => sb.id === storyboardId);
+                
+                if (btn.classList.contains('expand-script-btn')) {
+                     handleCardAction(null, 'toggle-script', {storyboard});
+                }
+            }
+
+            if (btn.classList.contains('download-storyboard-btn')) {
+                const storyboardId = parseInt(btn.dataset.storyboardId, 10);
+                const storyboard = state.storyboards.find(sb => sb.id === storyboardId);
+                if (!storyboard) return;
+
+                btn.disabled = true;
+                const originalContent = btn.innerHTML;
+                btn.innerHTML = `<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>`;
+
+                const zip = new JSZip();
+                if (storyboard.scriptText) zip.file('script.txt', storyboard.scriptText);
+
+                const imageCards = storyboard.cards.filter(c => c.imageUrl);
+                for (let i = 0; i < imageCards.length; i++) {
+                    const card = imageCards[i];
+                    try {
+                        const croppedBlob = await cropImageTo16x9(card.imageUrl);
+                        if(croppedBlob) {
+                            zip.file(`shot-${i + 1}.png`, croppedBlob);
+                        }
+                        const promptText = `Title: ${card.title}\n\nCamera: ${card.cameraMovement}\n\nPrompt: ${card.description}`;
+                        zip.file(`shot-${i + 1}-prompt.txt`, promptText);
+                    } catch (err) { console.error(`Failed to download shot ${i + 1}:`, err); }
+                }
+                
+                const content = await zip.generateAsync({ type: "blob" });
+                const link = document.createElement("a");
+                link.href = URL.createObjectURL(content);
+                const fileName = storyboard.title.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                link.download = `scene_${fileName}.zip`;
+                link.click();
+                URL.revokeObjectURL(link.href);
+
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+
+            if (btn.classList.contains('execute-storyboard-btn')) {
+                const storyboardId = parseInt(btn.dataset.storyboardId, 10);
+                const storyboard = state.storyboards.find(sb => sb.id === storyboardId);
+                if (!storyboard) return;
+
+                const playerCard = storyboard.cards.find(c => c.type === 'player');
+                if (!playerCard) return;
+
+                const playlist = [];
+                let currentNodeId = playerCard.id;
+
+                while (currentNodeId !== undefined) {
+                    const incomingConnection = storyboard.connections.find(c => c.to === currentNodeId);
+                    if (!incomingConnection) break;
+
+                    const fromCard = storyboard.cards.find(c => c.id === incomingConnection.from);
+                    if (fromCard && fromCard.type === 'image' && fromCard.imageUrl) {
+                        playlist.unshift(fromCard);
+                    }
+                    currentNodeId = incomingConnection.from;
+                }
+                
+                if (playlist.length > 0) {
+                    playerCard.isReady = true;
+                    playerCard.playlist = playlist;
+                    playerCard.thumbnailUrl = playlist[0].imageUrl;
+                } else {
+                    playerCard.isReady = false;
+                    playerCard.playlist = [];
+                    playerCard.thumbnailUrl = null;
+                }
+                updateCard(playerCard.id, playerCard);
+            }
+        });
+
+        // --- Connection Drag Handling ---
+        canvas.addEventListener('mousedown', e => {
+            const dot = e.target.closest('.connector-dot');
+            if (!dot || dot.dataset.connectorType !== 'out') return;
+            e.stopPropagation();
+
+            state.isConnecting = true;
+            const cardEl = dot.closest('.card');
+            const cardId = parseInt(cardEl.id.split('-')[1]);
+            const storyboardEl = cardEl.closest('.storyboard-container');
+            const storyboardData = state.storyboards.find(sb => sb.id === parseInt(storyboardEl.id.split('-')[1]));
+
+            state.connectionStart = { cardId, storyboardEl, storyboardData };
+
+            const svg = storyboardEl.querySelector('.connections-svg');
+            let tempPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            tempPath.classList.add('connection-path');
+            svg.appendChild(tempPath);
+
+            const onMouseMove = (moveEvent) => {
+                if (!state.isConnecting) return;
+                const startPos = getConnectorPosition(state.connectionStart.cardId, 'out', storyboardEl);
+                
+                const sbRect = storyboardEl.querySelector('.storyboard-shot-panel').getBoundingClientRect();
+                const endPos = {
+                    x: (moveEvent.clientX - sbRect.left) / state.zoom,
+                    y: (moveEvent.clientY - sbRect.top) / state.zoom,
+                };
+
+                const dx = Math.abs(startPos.x - endPos.x);
+                const d = `M ${startPos.x} ${startPos.y} C ${startPos.x + dx * 0.5} ${startPos.y}, ${endPos.x - dx * 0.5} ${endPos.y}, ${endPos.x} ${endPos.y}`;
+                tempPath.setAttribute('d', d);
+            };
+            
+            const onMouseUp = (upEvent) => {
+                const endDot = upEvent.target.closest('.connector-dot');
+                if (endDot && endDot.dataset.connectorType === 'in') {
+                    const endCardEl = endDot.closest('.card');
+                    const endCardId = parseInt(endCardEl.id.split('-')[1]);
+                    
+                    if (endCardId !== state.connectionStart.cardId && !storyboardData.connections.some(c => c.from === state.connectionStart.cardId && c.to === endCardId)) {
+                        storyboardData.connections.push({ from: state.connectionStart.cardId, to: endCardId });
+                    }
+                }
+                
+                tempPath.remove();
+                state.isConnecting = false;
+                state.connectionStart = null;
+                renderConnectionsFor(storyboardEl, storyboardData);
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+            };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp, { once: true });
+        });
+
+        // Panning listeners
+        canvasContainer.addEventListener('mousedown', (e) => {
+            if (e.target.closest('.storyboard-container') || e.target.closest('#bottom-controls')) return;
+            e.preventDefault();
+
+            state.isPanning = true;
+            canvasContainer.style.cursor = 'grabbing';
+            state.panStart.x = e.clientX - state.pan.x;
+            state.panStart.y = e.clientY - state.pan.y;
+
+            const onMouseMove = (moveEvent) => {
+                if (!state.isPanning) return;
+                state.pan.x = moveEvent.clientX - state.panStart.x;
+                state.pan.y = moveEvent.clientY - state.panStart.y;
+                updateCanvasTransform();
+            };
+
+            const onMouseUp = () => {
+                state.isPanning = false;
+                canvasContainer.style.cursor = 'grab';
+                window.removeEventListener('mousemove', onMouseMove);
+                window.removeEventListener('mouseup', onMouseUp);
+            };
+
+            window.addEventListener('mousemove', onMouseMove);
+            window.addEventListener('mouseup', onMouseUp);
+        });
+
+        // Zooming listeners
+        canvasContainer.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            const zoomFactor = 1.1, oldZoom = state.zoom;
+            const mouseX = e.clientX - canvasContainer.getBoundingClientRect().left;
+            const mouseY = e.clientY - canvasContainer.getBoundingClientRect().top;
+            if (e.deltaY < 0) state.zoom = Math.min(3, state.zoom * zoomFactor);
+            else state.zoom = Math.max(0.2, state.zoom / zoomFactor);
+            state.pan.x = mouseX - (mouseX - state.pan.x) * (state.zoom / oldZoom);
+            state.pan.y = mouseY - (mouseY - state.pan.y) * (state.zoom / oldZoom);
+            updateCanvasTransform();
+        });
+        zoomInBtn.addEventListener('click', () => { state.zoom = Math.min(3, state.zoom * 1.2); updateCanvasTransform(); });
+        zoomOutBtn.addEventListener('click', () => { state.zoom = Math.max(0.2, state.zoom * 0.8); updateCanvasTransform(); });
+        resetViewBtn.addEventListener('click', () => { state.zoom = 1; state.pan.x = 0; state.pan.y = 0; updateCanvasTransform(); });
+        
+        // Modal controls
+        function closeModal() {
+            modifyModal.querySelector('.modal-content').classList.add('scale-95');
+            modifyModal.classList.add('opacity-0');
+            setTimeout(() => {
+                modifyModal.classList.add('hidden');
+                state.activeModifyCardId = null;
+            }, 300);
+        }
+        cancelModifyBtn.addEventListener('click', closeModal);
+        confirmModifyBtn.addEventListener('click', async () => {
+            const id = state.activeModifyCardId;
+            const modifyPrompt = modifyPromptInput.value;
+            if (id === null || !modifyPrompt) return;
+
+            const originalCard = findStoryboardByCardId(id)?.cards.find(c => c.id === id);
+            if (!originalCard) return;
+            
+            closeModal();
+            
+            const storyboard = findStoryboardByCardId(id);
+            const modifiedCardData = {
+                id: state.nextCardId++,
+                x: originalCard.x, y: originalCard.y + 350,
+                title: `修改于: ${originalCard.title}`,
+                description: `${originalCard.description}\n(修改指令: ${modifyPrompt})`,
+                cameraMovement: originalCard.cameraMovement,
+                isLoading: true,
+            };
+            storyboard.cards.push(modifiedCardData);
+            renderStoryboards();
+            
+            const modifiedImageUrl = await generateImage(modifyPrompt, originalCard.imageUrl, null); 
+            if (modifiedImageUrl) {
+                updateCard(modifiedCardData.id, { imageUrl: modifiedImageUrl, isLoading: false });
+            } else {
+                 updateCard(modifiedCardData.id, { title: '修改失败', isLoading: false });
+            }
+        });
+
+        // --- Initialization ---
+        function initialize() {
+            state.storyboards = [];
+            renderStoryboards();
+            updateCanvasTransform();
+        }
+        initialize();
+    </script>
+</body>
+</html>
+
