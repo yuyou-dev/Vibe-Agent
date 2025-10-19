@@ -6,5 +6,7 @@
 
 - 1.剧本大师(frame_master.html)
   ### 预览
-  ![Image 1](nano-banana-base/front-page.png) 
+  ![Image 1](nano-banana-base/main-page.png)
+
+  
 - 2.待更新...
