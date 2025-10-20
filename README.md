@@ -1,6 +1,11 @@
 # Vibe-Agent
 > 手搓Agent系列教程，包括开源画板，基于Gemini、Nano Banana的多模态驱动智能生成模式的探索。
 
+**使用方法：**
+
+- 1.直接打开share链接（需要在gemini登陆的状态下），可以直接使用；点击右下角的“Copy Canvas”可以创建一个自己的Canvas副本。
+- 2.将html文件下载到本地，新开一个Gemini对话，启用Canvas模式，将html文件上传，要求直接用Canvas运行。
+
 ## Nano Banana Base
 运行于Gemini生态，原生调用Nana Banana图片引擎，可视化，可自定义功能模块的画布Agent
 
