@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>无限画布</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+            background-color: #111827; /* 深灰蓝背景 */
+            color: #f3f4f6;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* 画布容器 */
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            cursor: grab;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        #canvas-container.panning {
+            cursor: grabbing;
+        }
+
+        /* 网格背景 */
+        .grid-background {
+            --grid-color-light: rgba(255, 255, 255, 0.05);
+            --grid-color-dark: rgba(255, 255, 255, 0.1);
+            background-image:
+                linear-gradient(to right, var(--grid-color-light) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color-light) 1px, transparent 1px),
+                linear-gradient(to right, var(--grid-color-dark) 1px, transparent 1px),
+                linear-gradient(to bottom, var(--grid-color-dark) 1px, transparent 1px);
+            /* 初始大小在 JS 中设置 */
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+        }
+
+        /* 可拖动内容层 */
+        #canvas-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            transform-origin: 0 0;
+            transition: transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+        }
+
+        /* 图片容器 */
+        .draggable-item {
+            position: absolute;
+            padding: 8px;
+            background-color: rgba(31, 41, 55, 0.7); /* 半透明背景 */
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            cursor: move;
+            user-select: none;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .draggable-item:hover, .draggable-item.active {
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.8), 0 10px 40px rgba(0, 0, 0, 0.4);
+            border-color: rgba(59, 130, 246, 0.6);
+        }
+        
+        .draggable-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            display: block;
+            border-radius: 6px;
+        }
+
+        /* 缩放手柄 */
+        .resize-handle {
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background-color: #3B82F6;
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            cursor: se-resize;
+            right: -8px;
+            bottom: -8px;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        
+        .draggable-item.active .resize-handle {
+            opacity: 1;
+        }
+
+        /* 拖放提示 */
+        .drop-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(59, 130, 246, 0.2);
+            border: 3px dashed #3B82F6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+            z-index: 1000;
+        }
+
+        .drop-overlay.active {
+            opacity: 1;
+        }
+        
+        /* 底部信息栏 */
+        .info-bar {
+            position: fixed;
+            bottom: 1.5rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.75rem 1.5rem;
+            background-color: rgba(31, 41, 55, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            color: #d1d5db;
+            font-size: 0.875rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            z-index: 100;
+            user-select: none;
+            white-space: nowrap; /* 防止文字折行 */
+        }
+        
+        /* 加载动画 */
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3B82F6;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 画布容器 --><div id="canvas-container">
+        <!-- 动态网格背景 --><div class="grid-background"></div>
+        <!-- 容纳所有可拖动元素的内容层 --><div id="canvas-content"></div>
+    </div>
+    
+    <!-- 拖放遮罩层 --><div id="drop-overlay" class="drop-overlay">
+        <p class="text-2xl font-semibold text-white">将图片拖放到此处</p>
+    </div>
+
+    <!-- 顶部生成区域 --><div id="generator-bar" class="fixed top-6 left-1/2 -translate-x-1/2 z-[101] flex items-center gap-2 p-2 rounded-lg bg-gray-800/70 backdrop-blur-md border border-white/10 shadow-lg">
+        <input type="text" id="prompt-input" placeholder="选中图片进入改图模式" class="bg-gray-900/50 text-white placeholder-gray-400 border border-transparent focus:border-blue-500 focus:ring-0 rounded-md px-4 py-2 text-sm w-80 transition-all">
+        <button id="generate-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2 rounded-md transition-colors flex items-center justify-center relative w-[80px]">
+            <span class="btn-text transition-opacity">生成</span>
+            <div class="loader hidden absolute"></div>
+        </button>
+    </div>
+
+    <!-- 底部信息和控制栏 --><div class="info-bar">
+        <span>拖动空白处平移画布</span>
+        <span>|</span>
+        <span>滚轮缩放画布</span>
+        <span>|</span>
+        <span id="zoom-level">缩放: 100%</span>
+        <span>|</span>
+        <button id="reset-view-btn" class="hover:text-white transition-colors">重置视图</button>
+    </div>
+
+    <!-- 提示信息框 --><div id="toast-notification" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[200] px-6 py-3 rounded-lg bg-red-500/80 text-white shadow-lg backdrop-blur-sm transition-all duration-300 opacity-0 translate-y-4 pointer-events-none">
+        <p id="toast-message"></p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM 元素获取
+            const canvasContainer = document.getElementById('canvas-container');
+            const canvasContent = document.getElementById('canvas-content');
+            const gridBackground = document.querySelector('.grid-background');
+            const zoomLevelDisplay = document.getElementById('zoom-level');
+            const resetViewBtn = document.getElementById('reset-view-btn');
+            const dropOverlay = document.getElementById('drop-overlay');
+            const promptInput = document.getElementById('prompt-input');
+            const generateBtn = document.getElementById('generate-btn');
+            const btnText = generateBtn.querySelector('.btn-text');
+            const loader = generateBtn.querySelector('.loader');
+
+            // 画布状态变量
+            let state = {
+                pan: { x: window.innerWidth / 2, y: window.innerHeight / 2 }, // 初始 pan，让 (0,0) 在中心
+                scale: 1,
+                isPanning: false,
+                panStart: { x: 0, y: 0 },
+            };
+
+            // 图片交互状态
+            let interaction = {
+                activeItem: null,
+                isDragging: false,
+                isResizing: false,
+                dragStart: { x: 0, y: 0 },
+                itemStart: { x: 0, y: 0 },
+                resizeStart: { x: 0, y: 0 },
+                itemStartSize: { width: 0 },
+            };
+
+            const MIN_SCALE = 0.1;
+            const MAX_SCALE = 5;
+
+            // 更新画布和网格的 transform
+            function updateTransform(options = { transition: true }) {
+                // 更新内容层
+                const transitionStyle = options.transition ? 'transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)' : 'none';
+                canvasContent.style.transition = transitionStyle;
+                const transformValue = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.scale})`;
+                canvasContent.style.transform = transformValue;
+
+                // 更新网格背景
+                const lightGridSize = 20 * state.scale;
+                const darkGridSize = 100 * state.scale;
+                gridBackground.style.backgroundSize = `${lightGridSize}px ${lightGridSize}px, ${lightGridSize}px ${lightGridSize}px, ${darkGridSize}px ${darkGridSize}px, ${darkGridSize}px ${darkGridSize}px`;
+                gridBackground.style.backgroundPosition = `${state.pan.x}px ${state.pan.y}px`;
+
+                // 更新UI显示
+                zoomLevelDisplay.textContent = `缩放: ${Math.round(state.scale * 100)}%`;
+            }
+
+
+            // 屏幕坐标转换为世界（画布内容）坐标
+            function screenToWorld(point) {
+                return {
+                    x: (point.x - state.pan.x) / state.scale,
+                    y: (point.y - state.pan.y) / state.scale,
+                };
+            }
+
+            // 画布平移处理
+            canvasContainer.addEventListener('mousedown', (e) => {
+                if (e.target.closest('#generator-bar')) {
+                    return;
+                }
+                if (e.target === canvasContainer || e.target === gridBackground) {
+                    state.isPanning = true;
+                    canvasContainer.classList.add('panning');
+                    state.panStart.x = e.clientX - state.pan.x;
+                    state.panStart.y = e.clientY - state.pan.y;
+                    
+                    // 点击画布空白处时取消选中所有图片
+                    clearSelection();
+                }
+            });
+
+            window.addEventListener('mousemove', (e) => {
+                if (state.isPanning) {
+                    state.pan.x = e.clientX - state.panStart.x;
+                    state.pan.y = e.clientY - state.panStart.y;
+                    updateTransform({ transition: false });
+                } else if (interaction.isDragging) {
+                    handleDrag(e);
+                } else if (interaction.isResizing) {
+                    handleResize(e);
+                }
+            });
+
+            window.addEventListener('mouseup', () => {
+                if (state.isPanning) {
+                    state.isPanning = false;
+                    canvasContainer.classList.remove('panning');
+                    updateTransform();
+                }
+                // 停止拖动或缩放，但保持选中状态
+                interaction.isDragging = false;
+                interaction.isResizing = false;
+            });
+
+            // 画布缩放处理
+            canvasContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                const scrollDelta = -e.deltaY * 0.001;
+                const mousePoint = { x: e.clientX, y: e.clientY };
+                const worldPointBeforeZoom = screenToWorld(mousePoint);
+                const newScale = Math.max(MIN_SCALE, Math.min(MAX_SCALE, state.scale + scrollDelta * state.scale));
+                state.scale = newScale;
+                state.pan.x = mousePoint.x - worldPointBeforeZoom.x * state.scale;
+                state.pan.y = mousePoint.y - worldPointBeforeZoom.y * state.scale;
+                updateTransform();
+            });
+
+            // 重置视图
+            resetViewBtn.addEventListener('click', () => {
+                state.scale = 1;
+                state.pan = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+                updateTransform();
+            });
+            
+            // 图片拖放处理
+            canvasContainer.addEventListener('dragover', (e) => { e.preventDefault(); dropOverlay.classList.add('active'); });
+            canvasContainer.addEventListener('dragleave', (e) => { e.preventDefault(); dropOverlay.classList.remove('active'); });
+            canvasContainer.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropOverlay.classList.remove('active');
+                const files = e.dataTransfer.files;
+                if (files.length > 0) {
+                    for (const file of files) {
+                        if (file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                                const dropPoint = screenToWorld({ x: e.clientX, y: e.clientY });
+                                createImageItem(event.target.result, dropPoint);
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                    }
+                }
+            });
+
+            // 创建并添加图片元素
+            function createImageItem(src, position, size = { width: 300 }) {
+                const item = document.createElement('div');
+                item.className = 'draggable-item';
+                const img = document.createElement('img');
+                img.src = src;
+                img.draggable = false;
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                item.appendChild(img);
+                item.appendChild(resizeHandle);
+                canvasContent.appendChild(item);
+                item.style.width = `${size.width}px`;
+                item.style.left = `${position.x - size.width / 2}px`;
+                item.style.top = `${position.y}px`;
+                img.onload = () => {
+                    const itemHeight = item.offsetHeight;
+                    item.style.top = `${position.y - itemHeight / 2}px`;
+                };
+                item.addEventListener('mousedown', (e) => { e.stopPropagation(); startDrag(e, item); });
+                resizeHandle.addEventListener('mousedown', (e) => { e.stopPropagation(); startResize(e, item); });
+                return item;
+            }
+
+            function setActiveItem(item) {
+                if (interaction.activeItem && interaction.activeItem !== item) {
+                    interaction.activeItem.classList.remove('active');
+                }
+                interaction.activeItem = item;
+                if (item) {
+                    item.classList.add('active');
+                    canvasContent.appendChild(item); 
+                }
+                promptInput.placeholder = item ? '输入提示词修改选中图片...' : '输入提示词生成图片...';
+            }
+            
+            // 清除选中状态
+            function clearSelection() {
+                if (interaction.activeItem) {
+                    interaction.activeItem.classList.remove('active');
+                    interaction.activeItem = null;
+                }
+                 promptInput.placeholder = '输入提示词生成图片...';
+            }
+
+            function startDrag(e, item) {
+                setActiveItem(item);
+                interaction.isDragging = true;
+                interaction.dragStart = screenToWorld({ x: e.clientX, y: e.clientY });
+                interaction.itemStart = { x: parseFloat(item.style.left), y: parseFloat(item.style.top) };
+            }
+
+            function handleDrag(e) {
+                if (!interaction.isDragging || !interaction.activeItem) return;
+                const currentMouseWorld = screenToWorld({ x: e.clientX, y: e.clientY });
+                const delta = {
+                    x: currentMouseWorld.x - interaction.dragStart.x,
+                    y: currentMouseWorld.y - interaction.dragStart.y,
+                };
+                interaction.activeItem.style.left = `${interaction.itemStart.x + delta.x}px`;
+                interaction.activeItem.style.top = `${interaction.itemStart.y + delta.y}px`;
+            }
+
+            function startResize(e, item) {
+                setActiveItem(item);
+                interaction.isResizing = true;
+                interaction.resizeStart = { x: e.clientX, y: e.clientY };
+                interaction.itemStartSize = { width: parseFloat(item.style.width) };
+            }
+
+            function handleResize(e) {
+                if (!interaction.isResizing || !interaction.activeItem) return;
+                const deltaX = (e.clientX - interaction.resizeStart.x) / state.scale;
+                const newWidth = Math.max(50, interaction.itemStartSize.width + deltaX);
+                interaction.activeItem.style.width = `${newWidth}px`;
+            }
+
+            // --- 提示框 ---
+            function showToast(message) {
+                const toast = document.getElementById('toast-notification');
+                const toastMessage = document.getElementById('toast-message');
+                toastMessage.textContent = message;
+                toast.classList.remove('opacity-0', 'translate-y-4');
+                setTimeout(() => {
+                    toast.classList.add('opacity-0', 'translate-y-4');
+                }, 3000); // 3秒后自动隐藏
+            }
+
+            // --- 图片生成逻辑 ---
+            generateBtn.addEventListener('click', handleImageGeneration);
+            promptInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    handleImageGeneration();
+                }
+            });
+
+            async function handleImageGeneration() {
+                const prompt = promptInput.value.trim();
+                if (!prompt) {
+                    promptInput.focus();
+                    return;
+                }
+                
+                // 更新按钮为加载状态
+                btnText.classList.add('opacity-0');
+                loader.classList.remove('hidden');
+                generateBtn.disabled = true;
+                promptInput.disabled = true;
+
+                const existingItem = interaction.activeItem; // Keep a reference
+
+                try {
+                    let imageData;
+
+                    if (existingItem) {
+                        const imgElement = existingItem.querySelector('img');
+                        const base64Image = imgElement.src.split(',')[1];
+                        imageData = await generateImageWithRetry(prompt, base64Image);
+                    } else {
+                        imageData = await generateImageWithRetry(prompt);
+                    }
+
+                    if (imageData) {
+                        const imageUrl = `data:image/png;base64,${imageData}`;
+                        let newItem;
+                        if (existingItem) {
+                            // 改图模式：在旁边生成新图
+                            const originalX = parseFloat(existingItem.style.left);
+                            const originalY = parseFloat(existingItem.style.top);
+                            const originalWidthStyle = parseFloat(existingItem.style.width);
+                            const originalOffsetWidth = existingItem.offsetWidth;
+                            const originalOffsetHeight = existingItem.offsetHeight;
+                            const margin = 20;
+
+                            const newLeft = originalX + originalOffsetWidth + margin;
+                            
+                            const newPosition = {
+                                x: newLeft + originalWidthStyle / 2,
+                                y: originalY + originalOffsetHeight / 2
+                            };
+
+                            const newSize = { width: originalWidthStyle };
+                            newItem = createImageItem(imageUrl, newPosition, newSize);
+                        } else {
+                            // 生图模式：在中心生成
+                            const centerPoint = screenToWorld({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
+                            newItem = createImageItem(imageUrl, centerPoint, {width: 512});
+                        }
+                        
+                        if (newItem) {
+                            setActiveItem(newItem); // 自动选中新生成的图
+                        }
+                    } 
+                } catch (error) {
+                    console.error("Final error after retries:", error);
+                    showToast('图片生成失败，请稍后再试或调整提示词。');
+                } finally {
+                    // 恢复按钮状态
+                    btnText.classList.remove('opacity-0');
+                    loader.classList.add('hidden');
+                    generateBtn.disabled = false;
+                    promptInput.disabled = false;
+                    promptInput.value = '';
+                    // 不再自动清除选择
+                }
+            }
+
+            async function generateImageWithRetry(prompt, imageBase64 = null, retries = 3, delay = 1000) {
+                for (let i = 0; i < retries; i++) {
+                    try {
+                        return await callImageGenerationAPI(prompt, imageBase64);
+                    } catch (error) {
+                        console.log(`Attempt ${i + 1} failed. Retrying...`);
+                        if (i === retries - 1) {
+                            // 最后一次尝试失败，向上抛出错误
+                            throw error;
+                        }
+                        // 等待一段时间再重试
+                        await new Promise(res => setTimeout(res, delay * (i + 1)));
+                    }
+                }
+            }
+
+            async function callImageGenerationAPI(userPrompt, imageBase64) {
+                const apiKey = ""; // API key will be provided by the environment.
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+
+                const parts = [];
+                if (imageBase64) {
+                    parts.push({ "inlineData": { "mimeType": "image/png", "data": imageBase64 } });
+                }
+                parts.push({ "text": userPrompt });
+
+                const payload = {
+                    contents: [{ parts: parts }],
+                    generationConfig: { responseModalities: ['TEXT', 'IMAGE'] },
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API request failed with status ${response.status}`);
+                }
+
+                const result = await response.json();
+                const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+
+                if (!base64Data) {
+                    throw new Error("Invalid API response format, no image data found from Gemini.");
+                }
+
+                return base64Data;
+            }
+
+            // 初始设置
+            updateTransform();
+        });
+    </script>
+</body>
+</html>
+
