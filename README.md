@@ -20,3 +20,4 @@ B站专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
 - ### 2.即梦无限多帧画板（更新中）
   ![Image 2](nano-banana-base/jimeng-canvas.png)
 
+- ### 3.珠宝首饰佩戴大师（即将更新）
