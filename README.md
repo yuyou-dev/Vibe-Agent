@@ -1,6 +1,8 @@
 # Vibe-Agent
 > 手搓Agent系列教程，包括开源画板，基于Gemini、Nano Banana的多模态驱动智能生成模式的探索。
 
+B站专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
+
 **使用方法：**
 
 - 1.直接打开share链接（需要在gemini登陆的状态下），可以直接使用；点击右下角的“Copy Canvas”可以创建一个自己的Canvas副本。
