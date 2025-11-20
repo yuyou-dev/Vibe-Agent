@@ -21,3 +21,6 @@ B站专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
   ![Image 2](nano-banana-base/jimeng-canvas.png)
 
 - ### 3.珠宝首饰佩戴大师（即将更新）
+  
+ - [Gemini在线版](https://gemini.google.com/share/f2597097543b)
+
