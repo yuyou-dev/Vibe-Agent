@@ -1,7 +1,7 @@
 # Vibe-Agent
 > 手搓Agent系列教程，包括开源画板，基于Gemini、Nano Banana的多模态驱动智能生成模式的探索。
 
-B站专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
+B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
 
 **使用方法：**
 
@@ -21,6 +21,6 @@ B站专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
   ![Image 2](nano-banana-base/jimeng-canvas.png)
 
 - ### 3.珠宝首饰佩戴大师（即将更新）
-  
+   ![Image 3](Jewerly_Design/wearing_board.png)
  - [Gemini在线版](https://gemini.google.com/share/f2597097543b)
 
