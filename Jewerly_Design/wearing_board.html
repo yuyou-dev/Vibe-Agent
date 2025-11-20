@@ -1,0 +1,1370 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>智能首饰画板 Pro</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Inter字体 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9', // Sky 500
+                            600: '#0284c7',
+                        }
+                    },
+                    boxShadow: {
+                        'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.1)',
+                        'handle': '0 2px 5px rgba(0,0,0,0.2)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* --- 高级玻璃拟态 --- */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        }
+
+        .dark .glass-panel {
+            background: rgba(24, 24, 27, 0.6); /* Zinc 950 with opacity */
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* --- 画板网格 (更细腻) --- */
+        #artboard-container {
+            background-color: #f4f4f5; /* zinc-100 */
+            background-image:
+                linear-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: center;
+            transition: background-color 0.3s;
+        }
+
+        .dark #artboard-container {
+            background-color: #09090b; /* zinc-950 */
+            background-image:
+                linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+        }
+
+        /* --- 拖拽图层 --- */
+        .draggable-layer {
+            position: absolute;
+            cursor: grab;
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            /* 默认透明边框，避免抖动 */
+            box-shadow: 0 0 0 0 transparent;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .draggable-layer:active {
+            cursor: grabbing;
+        }
+
+        /* 选中状态：Figma风格边框 */
+        .draggable-layer.selected {
+            /* 使用 box-shadow 替代 border 以避免尺寸变化 */
+            box-shadow: 0 0 0 2px #0ea5e9; 
+        }
+
+        /* --- 操作手柄 (Figma Style) --- */
+        .selection-handle {
+            position: absolute;
+            display: none;
+            width: 12px;
+            height: 12px;
+            background-color: #fff;
+            border: 2px solid #0ea5e9; /* Primary Blue */
+            border-radius: 50%; /* 圆形 */
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            z-index: 1000;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s;
+        }
+        
+        .selection-handle:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+            background-color: #0ea5e9;
+            border-color: white;
+        }
+
+        .resize-handle { cursor: nwse-resize; }
+        
+        /* 旋转手柄特殊样式 */
+        .rotate-handle {
+            width: 24px;
+            height: 24px;
+            background-color: white;
+            border: 1px solid #e4e4e7;
+            color: #3f3f46;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: grab;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .rotate-handle::after {
+            content: '⟳';
+            font-size: 14px;
+            line-height: 1;
+        }
+        .dark .rotate-handle {
+            background-color: #27272a;
+            border-color: #3f3f46;
+            color: #e4e4e7;
+        }
+
+        /* 角落光标修正 */
+        #handle-tl, #handle-br { cursor: nwse-resize; }
+        #handle-tr, #handle-bl { cursor: nesw-resize; }
+
+        /* --- 区域选框 --- */
+        #selection-region-box {
+            position: absolute;
+            border: 2px dashed #0ea5e9;
+            background-color: rgba(14, 165, 233, 0.1);
+            display: none;
+            pointer-events: auto; 
+            cursor: move;
+            /* 动画虚线效果 */
+            background-image: linear-gradient(45deg, rgba(14,165,233,0.1) 25%, transparent 25%, transparent 50%, rgba(14,165,233,0.1) 50%, rgba(14,165,233,0.1) 75%, transparent 75%, transparent);
+            background-size: 20px 20px;
+        }
+
+        .region-selection-handle {
+            position: absolute;
+            display: none;
+            width: 10px;
+            height: 10px;
+            background-color: #fff;
+            border: 2px solid #0ea5e9;
+            border-radius: 50%;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            transform: translate(-50%, -50%);
+        }
+        #region-handle-tl, #region-handle-br { cursor: nwse-resize; }
+        #region-handle-tr, #region-handle-bl { cursor: nesw-resize; }
+
+        /* --- 拖放区域高亮 --- */
+        #artboard-container.drag-over {
+            outline: 4px dashed #0ea5e9;
+            outline-offset: -20px;
+            background-color: rgba(14, 165, 233, 0.05);
+        }
+
+        /* --- 动画类 --- */
+        .fade-in-up {
+            animation: fadeInUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translate(0, 10px); }
+            to { opacity: 1; transform: translate(0, 0); }
+        }
+
+        /* --- 滚动条美化 --- */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(156, 163, 175, 0.5);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(156, 163, 175, 0.8);
+        }
+
+        /* --- 按钮点击反馈 --- */
+        .btn-active:active {
+            transform: scale(0.96);
+        }
+
+        /* --- 新增：面板收缩动画样式 --- */
+        .panel-transition {
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        /* 面板隐藏状态：向左偏移，缩小，透明 */
+        .panel-hidden {
+            opacity: 0;
+            transform: translate(-20px, -50%) scale(0.95);
+            pointer-events: none;
+            visibility: hidden; /* 防止不可见时阻挡点击 */
+        }
+        
+        /* 面板显示状态：复位，正常大小，不透明 */
+        .panel-visible {
+            opacity: 1;
+            transform: translate(0, -50%) scale(1);
+            pointer-events: auto;
+            visibility: visible;
+        }
+
+        /* 展开按钮的动画 */
+        .expand-btn-hidden {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+            pointer-events: none;
+        }
+        .expand-btn-visible {
+            opacity: 1;
+            transform: translate(0, -50%) scale(1);
+            pointer-events: auto;
+        }
+
+        /* 新增: 展开按钮 Hover 效果优化 (修复位移冲突) */
+        .expand-btn-visible:hover {
+            transform: translate(0, -50%) scale(1.05); /* 关键: 保持垂直居中，仅轻微放大 */
+            background-color: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.3); /* 柔和的蓝色辉光 */
+            border-color: rgba(14, 165, 233, 0.4);
+        }
+        .dark .expand-btn-visible:hover {
+            background-color: rgba(39, 39, 42, 0.95);
+            box-shadow: 0 0 20px rgba(14, 165, 233, 0.2);
+        }
+    </style>
+</head>
+<body class="bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 overflow-hidden h-screen select-none">
+
+    <!-- 修改: 展开图层面板的按钮 (移除 hover:scale-110 以避免与 CSS Transform 冲突) -->
+    <button id="expand-layer-panel-btn" class="glass-panel p-3 z-30 absolute top-1/2 left-6 rounded-full text-zinc-600 dark:text-zinc-300 hover:text-primary-500 panel-transition expand-btn-visible" style="transform-origin: center;" title="打开图层面板">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+            <line x1="12" x2="12" y1="3" y2="21"/>
+            <path d="M3 9h18"/>
+            <path d="M3 15h18"/>
+        </svg>
+    </button>
+
+    <!-- 修改: 左侧浮动图层面板 (应用新动画类，移除 hidden 和 fade-in-up) -->
+    <aside id="layer-panel" class="glass-panel p-5 flex flex-col h-[65vh] max-h-[700px] w-[280px] absolute top-1/2 left-6 z-30 rounded-2xl panel-transition panel-hidden">
+        
+        <!-- 面板头部 -->
+        <div class="flex items-center justify-between mb-6">
+            <h2 class="text-sm font-bold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">Layers</h2>
+            <button id="collapse-layer-panel-btn" class="p-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 text-zinc-500 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15 18-6-6 6-6"></path>
+                </svg>
+            </button>
+        </div>
+
+        <!-- 图层列表 -->
+        <div class="flex-1 flex flex-col overflow-hidden">
+            <div id="layer-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                <!-- 占位符 -->
+                <div id="layer-placeholder" class="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 opacity-60">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mb-2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+                    <p class="text-xs">暂无图层</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 中间: 画布区域 -->
+    <main class="flex flex-col h-screen overflow-hidden relative bg-zinc-100 dark:bg-zinc-950">
+        
+        <!-- 顶部: 浮动控制栏 -->
+        <div class="absolute top-6 left-1/2 -translate-x-1/2 z-30">
+            <div class="glass-panel px-2 py-2 flex items-center space-x-1 rounded-2xl shadow-xl">
+                
+                <!-- 添加模特 -->
+                <div class="relative group">
+                    <!-- 修复: 添加 whitespace-nowrap 防止文字折行 -->
+                    <button id="add-model-options-btn" class="btn-active flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-white/60 dark:hover:bg-white/10 transition-all whitespace-nowrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-500"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+                        <span>添加模特</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-50"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="model-options-menu" class="hidden absolute top-full left-0 mt-2 w-40 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden py-1 anim-entry origin-top-left">
+                        <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/50 text-zinc-700 dark:text-zinc-200 transition-colors" data-action="upload-model">上传图片</button>
+                        <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/50 text-zinc-700 dark:text-zinc-200 transition-colors flex items-center justify-between" data-action="generate-model">
+                            AI生成 <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-1.5 py-0.5 rounded-full ml-2">NEW</span>
+                        </button>
+                        <input type="file" id="upload-model-input" class="hidden" accept="image/*">
+                    </div>
+                </div>
+
+                <div class="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
+
+                <!-- 添加首饰 -->
+                <div class="relative group">
+                    <!-- 修复: 添加 whitespace-nowrap 防止文字折行 -->
+                    <button id="add-jewelry-options-btn" class="btn-active flex items-center space-x-2 px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-700 dark:text-zinc-200 hover:bg-white/60 dark:hover:bg-white/10 transition-all whitespace-nowrap">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-500"><path d="M6 3h12l4 6-10 13L2 9Z"/><path d="M11 3 8 9l4 13 4-13-3-6"/></svg>
+                        <span>添加首饰</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="opacity-50"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    </button>
+                    <div id="jewelry-options-menu" class="hidden absolute top-full left-0 mt-2 w-40 bg-white dark:bg-zinc-800 border border-zinc-100 dark:border-zinc-700 rounded-xl shadow-xl overflow-hidden py-1 anim-entry origin-top-left">
+                        <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/50 text-zinc-700 dark:text-zinc-200 transition-colors" data-action="upload-jewelry">上传图片</button>
+                        <button class="w-full text-left px-4 py-2.5 text-sm hover:bg-zinc-50 dark:hover:bg-zinc-700/50 text-zinc-700 dark:text-zinc-200 transition-colors flex items-center justify-between" data-action="generate-jewelry">
+                            AI生成 <span class="text-[10px] bg-gradient-to-r from-indigo-500 to-purple-500 text-white px-1.5 py-0.5 rounded-full ml-2">PRO</span>
+                        </button>
+                        <input type="file" id="upload-jewelry-input" class="hidden" accept="image/*">
+                    </div>
+                </div>
+
+                <div class="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
+
+                <!-- 佩戴模式按钮组 -->
+                <div class="flex bg-zinc-100/50 dark:bg-zinc-800/50 rounded-xl p-1">
+                    <!-- 修复: 添加 whitespace-nowrap -->
+                    <button id="regional-try-on-btn" class="btn-active px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition-all text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 whitespace-nowrap" title="框选区域进行佩戴">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-3-2V5a2 2 0 0 1 2-2h6"></path><path d="m21 3-9 9"></path><path d="M15 3h6v6"></path></svg>
+                        <span class="hidden sm:inline">区域</span>
+                    </button>
+                    <!-- 修复: 添加 whitespace-nowrap -->
+                    <button id="anchor-try-on-btn" class="btn-active px-3 py-2 rounded-lg text-sm font-medium flex items-center space-x-2 transition-all text-zinc-600 dark:text-zinc-400 hover:bg-white dark:hover:bg-zinc-700 whitespace-nowrap" title="锚定模特自动佩戴">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg>
+                        <span class="hidden sm:inline">锚定</span>
+                    </button>
+                </div>
+
+                <div class="w-px h-6 bg-zinc-300 dark:bg-zinc-700 mx-1"></div>
+                
+                <!-- 重置 -->
+                <button id="reset-btn" class="btn-active p-2.5 rounded-xl text-zinc-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors" title="重置画板">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+
+                <!-- 主操作按钮 -->
+                <!-- 修复: 添加 whitespace-nowrap -->
+                <button id="ai-generate-btn" class="btn-active ml-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white pl-4 pr-5 py-2.5 rounded-xl text-sm font-semibold shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/40 transition-all flex items-center space-x-2 whitespace-nowrap">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>
+                    <span>智能佩戴</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 画布 -->
+        <div id="artboard-container" class="flex-1 relative overflow-hidden cursor-default">
+            <!-- 图层将在这里动态插入 -->
+            
+            <!-- 区域选择框 -->
+            <div id="selection-region-box"></div>
+            
+            <!-- 区域选择框的操作点 -->
+            <div id="region-handle-tl" class="region-selection-handle"></div>
+            <div id="region-handle-tr" class="region-selection-handle"></div>
+            <div id="region-handle-br" class="region-selection-handle"></div>
+            <div id="region-handle-bl" class="region-selection-handle"></div>
+
+            <!-- 图层操作点 -->
+            <div id="handle-tl" class="selection-handle resize-handle"></div>
+            <div id="handle-tr" class="selection-handle resize-handle"></div>
+            <div id="handle-br" class="selection-handle resize-handle"></div>
+            <div id="handle-bl" class="selection-handle resize-handle"></div>
+            <div id="handle-rot" class="selection-handle rotate-handle rounded-full text-xs"></div>
+        </div>
+    </main>
+
+    <!-- AI 生成图片 Modal -->
+    <div id="ai-image-modal" class="fixed inset-0 bg-black/50 dark:bg-black/70 backdrop-blur-sm z-[2000] flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl max-w-lg w-full p-6 relative border border-zinc-200 dark:border-zinc-800 transform transition-all duration-300 scale-100 opacity-100">
+            <button id="close-ai-image-modal-btn" class="absolute top-4 right-4 p-2 rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-400 hover:text-zinc-900 dark:hover:text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+            </button>
+            
+            <div class="flex flex-col items-center mb-6">
+                <div class="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/30 rounded-2xl flex items-center justify-center mb-3 text-indigo-600 dark:text-indigo-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg>
+                </div>
+                <h3 id="ai-image-modal-title" class="text-xl font-bold text-zinc-900 dark:text-zinc-100">AI 创意生成</h3>
+                <p class="text-sm text-zinc-500 dark:text-zinc-400">描述你想象中的画面，AI将为你实现</p>
+            </div>
+            
+            <div class="space-y-4">
+                <div class="relative">
+                    <textarea id="ai-prompt-input" class="w-full p-4 rounded-2xl bg-zinc-50 dark:bg-black/50 border border-zinc-200 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none resize-none min-h-[120px] transition-all" placeholder="例如：'一位佩戴钻石项链的优雅女性'"></textarea>
+                    <div class="absolute bottom-3 right-3 text-xs text-zinc-400">支持中英文</div>
+                </div>
+                
+                <button id="generate-ai-image-btn" class="btn-active w-full bg-zinc-900 dark:bg-zinc-100 hover:bg-zinc-800 dark:hover:bg-white text-white dark:text-zinc-900 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-zinc-500/10">
+                    开始生成
+                </button>
+
+                <div id="ai-image-loading" class="flex flex-col items-center justify-center py-8 hidden">
+                    <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+                    <p class="text-sm text-zinc-500 font-medium animate-pulse">正在绘制灵感...</p>
+                </div>
+
+                <div id="ai-image-result-container" class="hidden space-y-4">
+                    <div class="rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-black/50">
+                        <img id="ai-generated-image-preview" src="" alt="AI Result" class="w-full h-48 object-contain">
+                    </div>
+                    <div class="grid grid-cols-2 gap-3">
+                        <button id="cancel-ai-image-btn" class="btn-active py-2.5 rounded-xl text-sm font-medium border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors">放弃</button>
+                        <button id="add-ai-image-to-artboard-btn" class="btn-active py-2.5 rounded-xl text-sm font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-colors shadow-lg shadow-indigo-500/20">添加到画板</button>
+                    </div>
+                </div>
+
+                <div id="ai-image-error" class="hidden p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-xl flex items-start space-x-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-red-500 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                    <div>
+                        <p class="text-sm font-semibold text-red-600 dark:text-red-400">生成失败</p>
+                        <p id="ai-image-error-message" class="text-xs text-red-500 dark:text-red-400/80 mt-0.5"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI 智能佩戴 Modal -->
+    <!-- 修复：z-index 提升至 9999 -->
+    <div id="ai-modal" class="fixed inset-0 bg-black/60 backdrop-blur-md z-[9999] flex items-center justify-center p-4 hidden">
+        <div class="bg-white dark:bg-zinc-900 rounded-3xl shadow-2xl max-w-2xl w-full p-1 relative overflow-hidden border border-zinc-200 dark:border-zinc-700/50 max-h-[95vh] overflow-y-auto">
+            <!-- 背景光效 -->
+            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500"></div>
+            
+            <div class="p-8 relative z-10">
+                <button id="close-modal-btn" class="absolute top-4 right-4 p-2 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors rounded-full hover:bg-zinc-100 dark:hover:bg-zinc-800">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+                
+                <!-- 加载中 (新样式，包含标题) -->
+                <div id="ai-loading" class="flex flex-col items-center justify-center py-12">
+                    <!-- 头部标题 -->
+                    <div class="text-center mb-8">
+                        <h3 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 mb-2">智能佩戴处理中</h3>
+                        <p class="text-zinc-500 dark:text-zinc-400 text-sm">AI正在精确计算光影与透视，为您呈现完美效果</p>
+                    </div>
+                    <!-- 动画 -->
+                    <div class="relative mb-6">
+                        <div class="w-16 h-16 border-4 border-zinc-200 dark:border-zinc-700 rounded-full"></div>
+                        <div class="absolute top-0 left-0 w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-indigo-500 animate-pulse">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>
+                        </div>
+                    </div>
+                    <p class="text-zinc-600 dark:text-zinc-300 font-medium">正在生成合成效果...</p>
+                    <p class="text-xs text-zinc-400 mt-2">预计耗时 10-30 秒</p>
+                </div>
+
+                <!-- 结果显示 (新样式，包含标题和下载按钮) -->
+                <div id="ai-result" class="hidden fade-in-up flex flex-col items-center">
+                    <div class="text-center mb-6">
+                        <h3 class="text-2xl font-bold text-zinc-900 dark:text-zinc-100 mb-1">佩戴效果预览</h3>
+                        <p class="text-zinc-500 dark:text-zinc-400 text-sm">AI已完成渲染，请查看最终效果。</p>
+                    </div>
+                    
+                    <div class="bg-zinc-100 dark:bg-black rounded-xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-xl mb-6 w-full max-w-[512px]">
+                        <img id="ai-result-image" src="" alt="AI 生成结果" class="w-full h-auto max-h-[70vh] object-contain">
+                    </div>
+
+                    <div class="flex space-x-4 w-full justify-center">
+                        <button id="cancel-ai-result-btn" class="btn-active px-6 py-3 rounded-xl text-sm font-medium border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-700 dark:text-zinc-300 transition-colors">
+                            关闭
+                        </button>
+                        <a id="download-ai-result-btn" download="ai_jewelry_design.png" class="btn-active cursor-pointer flex items-center space-x-2 bg-indigo-600 hover:bg-indigo-700 text-white pl-5 pr-6 py-3 rounded-xl text-sm font-bold transition-all shadow-lg shadow-indigo-500/20">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                            <span>下载图片</span>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- 错误显示 -->
+                <div id="ai-error" class="hidden fade-in-up">
+                     <div class="text-center mb-6">
+                        <h3 class="text-2xl font-bold text-red-600 dark:text-red-400 mb-1">处理失败</h3>
+                        <p class="text-zinc-500 dark:text-zinc-400 text-sm">请检查图层配置和网络连接</p>
+                    </div>
+                    <div class="bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-900/50 rounded-xl p-4 text-center">
+                        <div class="inline-flex items-center justify-center w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/40 text-red-500 mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>
+                        </div>
+                        <h4 class="text-red-700 dark:text-red-400 font-bold mb-1">错误详情</h4>
+                        <p id="ai-error-message" class="text-sm text-red-500 dark:text-red-400/80 mt-0.5"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        // --- 全局状态 ---
+        let layers = []; 
+        let selectedLayerId = null;
+        let layerCounter = 0;
+        let isDraggingLayer = false;
+        let dragOffsetX = 0;
+        let dragOffsetY = 0;
+        let artboardRect = null;
+        let currentAIGenerationType = null; 
+
+        // --- 新增: 区域佩戴状态 ---
+        let isRegionModeActive = false;
+        let isAnchorModeActive = false; 
+        let anchorBoxOffset = { x: 0, y: 0 }; 
+        let isDrawingRegion = false;
+        let regionStartPos = { x: 0, y: 0 };
+        let selectionRegion = null; 
+        let selectionRegionEl = null;
+        let isDraggingRegionBox = false;
+        let regionDragStart = {}; 
+        let regionHandleElements = {};
+        let isResizingRegion = false;
+        let regionResizeState = {};
+
+
+        // --- 新增: 选框和操作点 ---
+        let handleElements = {}; 
+        let isRotating = false;
+        let isResizing = false;
+        let handleDragState = {}; 
+
+        // --- DOM 元素 ---
+        const artboard = document.getElementById('artboard-container');
+        const regionalTryOnBtn = document.getElementById('regional-try-on-btn');
+        const anchorTryOnBtn = document.getElementById('anchor-try-on-btn'); 
+        selectionRegionEl = document.getElementById('selection-region-box'); 
+
+        const layerList = document.getElementById('layer-list');
+        const layerPlaceholder = document.getElementById('layer-placeholder');
+        
+        const expandLayerPanelBtn = document.getElementById('expand-layer-panel-btn');
+        const layerPanel = document.getElementById('layer-panel');
+        const collapseLayerPanelBtn = document.getElementById('collapse-layer-panel-btn');
+
+        const uploadModelInput = document.getElementById('upload-model-input');
+        const uploadJewelryInput = document.getElementById('upload-jewelry-input');
+
+        const aiImageModal = document.getElementById('ai-image-modal');
+        const closeAiImageModalBtn = document.getElementById('close-ai-image-modal-btn');
+        const aiImageModalTitle = document.getElementById('ai-image-modal-title');
+        const aiPromptInput = document.getElementById('ai-prompt-input');
+        const generateAiImageBtn = document.getElementById('generate-ai-image-btn');
+        const aiImageLoading = document.getElementById('ai-image-loading');
+        const aiImageResultContainer = document.getElementById('ai-image-result-container');
+        const aiGeneratedImagePreview = document.getElementById('ai-generated-image-preview');
+        const addAiImageToArtboardBtn = document.getElementById('add-ai-image-to-artboard-btn');
+        const cancelAiImageBtn = document.getElementById('cancel-ai-image-btn');
+        const aiImageError = document.getElementById('ai-image-error');
+        const aiImageErrorMessage = document.getElementById('ai-image-error-message');
+
+
+        const aiModal = document.getElementById('ai-modal');
+        // const aiProcessingHeader = document.getElementById('ai-processing-header'); // Removed from DOM, now part of aiLoading
+        const aiLoading = document.getElementById('ai-loading');
+        const aiResult = document.getElementById('ai-result');
+        const aiResultImage = document.getElementById('ai-result-image');
+        const aiError = document.getElementById('ai-error');
+        const aiErrorMessage = document.getElementById('ai-error-message');
+        const downloadAiResultBtn = document.getElementById('download-ai-result-btn');
+        const cancelAiResultBtn = document.getElementById('cancel-ai-result-btn');
+
+
+        // --- 初始化操作点 ---
+        function initRegionHandles() {
+            regionHandleElements = {
+                tl: document.getElementById('region-handle-tl'),
+                tr: document.getElementById('region-handle-tr'),
+                br: document.getElementById('region-handle-br'),
+                bl: document.getElementById('region-handle-bl'),
+            };
+            for (const key in regionHandleElements) {
+                regionHandleElements[key].addEventListener('mousedown', onRegionResizeHandleMouseDown);
+            }
+        }
+        
+        function initHandles() {
+            handleElements = {
+                tl: document.getElementById('handle-tl'),
+                tr: document.getElementById('handle-tr'),
+                br: document.getElementById('handle-br'),
+                bl: document.getElementById('handle-bl'),
+                rot: document.getElementById('handle-rot')
+            };
+            ['tl', 'tr', 'br', 'bl'].forEach(key => {
+                handleElements[key].dataset.handleType = key; 
+                handleElements[key].addEventListener('mousedown', onResizeHandleMouseDown);
+            });
+            handleElements.rot.addEventListener('mousedown', onRotateHandleMouseDown);
+            document.addEventListener('mousemove', onHandleMouseMove);
+            document.addEventListener('mouseup', onHandleMouseUp);
+        }
+
+        function updateHandlesPosition(layer) {
+            if (!layer || !layer.el || !handleElements.tl) return;
+            const layerCenterX = layer.x + (layer.width / 2);
+            const layerCenterY = layer.y + (layer.height / 2);
+            const halfW = (layer.width * layer.scale) / 2;
+            const halfH = (layer.height * layer.scale) / 2;
+            const corners = {
+                tl: { x: -halfW, y: -halfH },
+                tr: { x: halfW, y: -halfH },
+                br: { x: halfW, y: halfH },
+                bl: { x: -halfW, y: halfH },
+                rot: { x: 0, y: -halfH - 24 } 
+            };
+            const rad = layer.rotation * Math.PI / 180;
+            const cos = Math.cos(rad);
+            const sin = Math.sin(rad);
+            for (const key in handleElements) {
+                if (handleElements[key]) {
+                    const point = corners[key];
+                    if (!point) continue; 
+                    const rotatedX = point.x * cos - point.y * sin;
+                    const rotatedY = point.x * sin + point.y * cos;
+                    handleElements[key].style.left = `${layerCenterX + rotatedX}px`;
+                    handleElements[key].style.top = `${layerCenterY + rotatedY}px`;
+                    handleElements[key].style.display = (key === 'rot') ? 'flex' : 'block'; 
+                }
+            }
+        }
+        
+        function hideHandles() {
+            if (!handleElements.tl) return; 
+            for (const key in handleElements) {
+                if (handleElements[key]) {
+                    handleElements[key].style.display = 'none';
+                }
+            }
+        }
+
+        function updateZIndices() {
+            const baseZ = 10;
+            const gapForBox = 2; 
+            let highestModelIndex = -1;
+            for (let i = layers.length - 1; i >= 0; i--) {
+                if (layers[i].type === 'model') {
+                    highestModelIndex = i;
+                    break;
+                }
+            }
+            let currentZ = baseZ;
+            if (highestModelIndex === -1) {
+                selectionRegionEl.style.zIndex = '5';
+                Object.values(regionHandleElements).forEach(h => h.style.zIndex = '6');
+            }
+            layers.forEach((layer, index) => {
+                layer.zIndex = currentZ;
+                if (layer.el) {
+                    layer.el.style.zIndex = layer.zIndex;
+                }
+                if (index === highestModelIndex) {
+                    selectionRegionEl.style.zIndex = `${currentZ + 1}`;
+                    Object.values(regionHandleElements).forEach(h => h.style.zIndex = `${currentZ + 2}`);
+                    currentZ += gapForBox;
+                }
+                currentZ++; 
+            });
+        }
+
+        function updateRegionHandlesPosition(region) {
+            if (!region) {
+                hideRegionHandles();
+                return;
+            }
+            const positions = {
+                tl: { x: region.x, y: region.y },
+                tr: { x: region.x + region.width, y: region.y },
+                br: { x: region.x + region.width, y: region.y + region.height },
+                bl: { x: region.x, y: region.y + region.height }
+            };
+            for (const key in regionHandleElements) {
+                const handle = regionHandleElements[key];
+                const pos = positions[key];
+                handle.style.left = `${pos.x}px`;
+                handle.style.top = `${pos.y}px`;
+                handle.style.display = 'block';
+            }
+        }
+
+        function hideRegionHandles() {
+            for (const key in regionHandleElements) {
+                regionHandleElements[key].style.display = 'none';
+            }
+        }
+
+        function addLayer(src, type, initialWidth = null, initialHeight = null) {
+             layerCounter++;
+            const id = `layer-${layerCounter}`;
+            artboardRect = artboard.getBoundingClientRect();
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.src = src;
+            img.onload = () => {
+                let width = initialWidth || img.width;
+                let height = initialHeight || img.height;
+                const originalWidth = img.width;
+                const originalHeight = img.height;
+                const maxWidth = artboard.clientWidth * 0.8;
+                const maxHeight = artboard.clientHeight * 0.8;
+                if (width > maxWidth || height > maxHeight) {
+                    const ratio = Math.min(maxWidth / width, maxHeight / height);
+                    width *= ratio;
+                    height *= ratio;
+                } else if (type === 'jewelry' && (width > 200 || height > 200)) {
+                    const ratio = Math.min(200 / width, 200 / height);
+                    width *= ratio;
+                    height *= ratio;
+                } else if (type === 'model' && (width < 300 || height < 300)) {
+                    const ratio = Math.min(300 / width, 300 / height);
+                    width *= ratio;
+                    height *= ratio;
+                }
+                const newLayer = {
+                    id, src, type, x: (artboard.clientWidth - width) / 2, y: (artboard.clientHeight - height) / 2, width, height, originalWidth, originalHeight, scale: 1, rotation: 0, zIndex: layers.length, isVisible: true, el: null
+                };
+                const layerEl = document.createElement('div');
+                layerEl.id = id;
+                layerEl.className = 'draggable-layer';
+                layerEl.style.backgroundImage = `url(${src})`;
+                layerEl.style.width = `${width}px`;
+                layerEl.style.height = `${height}px`;
+                newLayer.el = layerEl;
+                artboard.appendChild(layerEl);
+                layers.push(newLayer);
+                renderLayerList();
+                updateLayerStyle(newLayer);
+                updateZIndices();
+                selectLayer(id);
+                layerEl.addEventListener('mousedown', onLayerMouseDown);
+                if (isAnchorModeActive && newLayer.type === 'model') {
+                    createOrUpdateAnchorBox();
+                }
+            };
+        }
+        function selectLayer(id) {
+            if (selectedLayerId === id) return;
+            if (selectedLayerId) {
+                const oldLayer = getLayerById(selectedLayerId);
+                if (oldLayer) {
+                    oldLayer.el?.classList.remove('selected');
+                    document.getElementById(`list-${oldLayer.id}`)?.classList.remove('bg-indigo-50', 'dark:bg-indigo-900/20', 'border-indigo-200', 'dark:border-indigo-700');
+                }
+            }
+            hideHandles();
+            selectedLayerId = id;
+            const newLayer = getLayerById(id);
+            if (newLayer) {
+                newLayer.el.classList.add('selected');
+                const listItem = document.getElementById(`list-${newLayer.id}`);
+                if (listItem) listItem.classList.add('bg-indigo-50', 'dark:bg-indigo-900/20', 'border-indigo-200', 'dark:border-indigo-700');
+                updateHandlesPosition(newLayer);
+            } else {
+                hideHandles();
+            }
+        }
+        function deselectAll() {
+            if (selectedLayerId) {
+                const oldLayer = getLayerById(selectedLayerId);
+                if (oldLayer) {
+                    oldLayer.el?.classList.remove('selected');
+                    document.getElementById(`list-${oldLayer.id}`)?.classList.remove('bg-indigo-50', 'dark:bg-indigo-900/20', 'border-indigo-200', 'dark:border-indigo-700');
+                }
+            }
+            selectedLayerId = null;
+            hideHandles();
+        }
+        function renderLayerList() {
+            layerList.innerHTML = ''; 
+            if (layers.length === 0) {
+                layerList.appendChild(layerPlaceholder);
+                return;
+            }
+            const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
+            [...sortedLayers].reverse().forEach(layer => {
+                const item = document.createElement('div');
+                item.id = `list-${layer.id}`;
+                item.className = 'layer-item group flex items-center justify-between p-2 rounded-xl border border-transparent hover:bg-white hover:shadow-sm dark:hover:bg-zinc-800/50 transition-all duration-200 cursor-pointer';
+                item.draggable = true;
+                const layerName = layer.type === 'model' ? '模特图层' : '首饰图层';
+                const layerNumber = layer.id.split('-')[1];
+                item.innerHTML = `
+                    <div class="flex items-center space-x-3 overflow-hidden">
+                        <svg class="text-zinc-300 dark:text-zinc-600 opacity-0 group-hover:opacity-100 transition-opacity cursor-move" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="12" r="1"/><circle cx="9" cy="5" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="19" r="1"/></svg>
+                        <div class="w-10 h-10 rounded-lg bg-zinc-100 dark:bg-zinc-800 bg-cover bg-center border border-zinc-200 dark:border-zinc-700 shadow-sm" style="background-image: url(${layer.src})"></div>
+                        <div class="flex flex-col">
+                            <span class="text-xs font-semibold text-zinc-700 dark:text-zinc-200 truncate w-24">${layerName} ${layerNumber}</span>
+                            <span class="text-[10px] text-zinc-400 uppercase">${layer.type}</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button data-id="${layer.id}" class="toggle-visibility p-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors">
+                            ${layer.isVisible ? `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"></path><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"></path><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"></path><line x1="2" y1="2" x2="22" y2="22"></line></svg>`}
+                        </button>
+                        <button data-id="${layer.id}" class="delete-layer-btn p-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 text-zinc-400 hover:text-red-500 transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                        </button>
+                    </div>
+                `;
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('.toggle-visibility')) return;
+                    if (e.target.closest('.delete-layer-btn')) return;
+                    selectLayer(layer.id);
+                });
+                item.querySelector('.toggle-visibility').addEventListener('click', () => toggleLayerVisibility(layer.id));
+                item.querySelector('.delete-layer-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteLayer(layer.id); });
+                item.addEventListener('dragstart', (e) => { e.dataTransfer.setData('text/plain', layer.id); e.dataTransfer.effectAllowed = 'move'; item.style.opacity = '0.5'; });
+                item.addEventListener('dragend', (e) => { item.style.opacity = '1'; });
+                item.addEventListener('dragover', (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; item.style.transform = 'translateY(2px)'; });
+                item.addEventListener('dragleave', () => { item.style.transform = 'none'; });
+                item.addEventListener('drop', (e) => { e.preventDefault(); item.style.transform = 'none'; const draggedId = e.dataTransfer.getData('text/plain'); const targetId = layer.id; if (draggedId === targetId) return; moveLayer(draggedId, targetId); });
+                layerList.appendChild(item);
+            });
+            if (selectedLayerId) {
+                const selectedItem = document.getElementById(`list-${selectedLayerId}`);
+                if (selectedItem) selectedItem.classList.add('bg-indigo-50', 'dark:bg-indigo-900/20', 'border-indigo-200', 'dark:border-indigo-700');
+            }
+        }
+        function moveLayer(draggedId, targetId) {
+            const currentList = Array.from(layerList.children).filter(el => el.id.startsWith('list-'));
+            const draggedListIndex = currentList.findIndex(item => item.id === `list-${draggedId}`);
+            const targetListIndex = currentList.findIndex(item => item.id === `list-${targetId}`);
+            if (draggedListIndex === -1 || targetListIndex === -1) return;
+            const actualDraggedIndex = layers.length - 1 - draggedListIndex;
+            const actualTargetIndex = layers.length - 1 - targetListIndex;
+            const [draggedItem] = layers.splice(actualDraggedIndex, 1);
+            layers.splice(actualTargetIndex, 0, draggedItem);
+            updateZIndices();
+            renderLayerList();
+            if (isAnchorModeActive) createOrUpdateAnchorBox();
+        }
+        function toggleLayerVisibility(id) {
+            const layer = getLayerById(id);
+            if (layer) {
+                layer.isVisible = !layer.isVisible;
+                layer.el.style.display = layer.isVisible ? 'block' : 'none';
+                renderLayerList(); 
+                if (isAnchorModeActive && layer.type === 'model') createOrUpdateAnchorBox();
+            }
+        }
+        function updateLayerStyle(layer) {
+            if (!layer || !layer.el) return;
+            layer.el.style.transformOrigin = 'center center';
+            layer.el.style.transform = `translate(${layer.x}px, ${layer.y}px) rotate(${layer.rotation}deg) scale(${layer.scale})`;
+            if (layer.id === selectedLayerId) updateHandlesPosition(layer);
+        }
+        function getLayerById(id) { return layers.find(l => l.id === id) || null; }
+        function deleteLayer(id) {
+            const layerToDelete = getLayerById(id);
+            if (!layerToDelete) return;
+            layerToDelete.el.remove();
+            layers = layers.filter(l => l.id !== id);
+            if (selectedLayerId === id) deselectAll();
+            updateZIndices();
+            renderLayerList();
+            const layerType = layerToDelete ? layerToDelete.type : null;
+            if (isAnchorModeActive && layerType === 'model') createOrUpdateAnchorBox();
+        }
+        function resetArtboard() {
+            if (layers.length === 0) return; 
+            layers.forEach(layer => layer.el.remove());
+            layers = [];
+            layerCounter = 0;
+            deselectAll(); 
+            hideSelectionRegion(); 
+            renderLayerList();
+        }
+        async function generateCompositeImage(baseModelLayer) {
+            if (!baseModelLayer) throw new Error("未能找到用于合成的模特图层。");
+            const canvas = document.createElement('canvas');
+            canvas.width = baseModelLayer.originalWidth;
+            canvas.height = baseModelLayer.originalHeight;
+            const ctx = canvas.getContext('2d');
+            const exportScale = baseModelLayer.originalWidth / baseModelLayer.width;
+            ctx.scale(exportScale, exportScale);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(0, 0, baseModelLayer.width, baseModelLayer.height);
+            const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
+            for (const layer of sortedLayers) {
+                if (!layer.isVisible) continue;
+                const img = await new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.crossOrigin = 'Anonymous'; 
+                    img.onload = () => resolve(img);
+                    img.onerror = () => { console.error(`无法加载图片: ${layer.src}`); reject(new Error(`无法加载图片: ${layer.src}`)); };
+                    img.src = layer.src;
+                });
+                ctx.save();
+                const relativeX = layer.x - baseModelLayer.x;
+                const relativeY = layer.y - baseModelLayer.y;
+                const centerX = relativeX + layer.width / 2;
+                const centerY = relativeY + layer.height / 2;
+                ctx.translate(centerX, centerY);
+                ctx.rotate(layer.rotation * Math.PI / 180);
+                ctx.scale(layer.scale, layer.scale);
+                ctx.drawImage(img, -layer.width / 2, -layer.height / 2, layer.width, layer.height);
+                ctx.restore();
+            }
+            return canvas.toDataURL('image/png').split(',')[1]; 
+        }
+        async function callNanoBanana(prompt, base64ImageData = null) {
+            const apiKey = ""; 
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image-preview:generateContent?key=${apiKey}`;
+            const parts = [{ text: prompt }];
+            if (base64ImageData) parts.push({ inlineData: { mimeType: "image/png", data: base64ImageData } });
+            const payload = { contents: [{ parts }], generationConfig: { responseModalities: ['IMAGE'] } };
+            let response; let retries = 0; const maxRetries = 5; let delay = 1000;
+            while (retries < maxRetries) {
+                try {
+                    response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                    if (response.ok) {
+                        const result = await response.json();
+                        const base64Data = result?.candidates?.[0]?.content?.parts?.find(p => p.inlineData)?.inlineData?.data;
+                        if (!base64Data) throw new Error("API 响应中未找到图像数据。");
+                        return base64Data; 
+                    } else if (response.status === 429) { await new Promise(resolve => setTimeout(resolve, delay)); delay *= 2; retries++; } else { const errorResult = await response.json(); throw new Error(errorResult.error?.message || `HTTP 错误: ${response.status}`); }
+                } catch (error) { if (retries >= maxRetries - 1) throw error; await new Promise(resolve => setTimeout(resolve, delay)); delay *= 2; retries++; }
+            }
+            throw new Error("已达到最大重试次数。");
+        }
+
+        function onLayerMouseDown(e) {
+            if (isRegionModeActive) { const layer = getLayerById(e.currentTarget.id); if (layer && layer.type === 'model') return; }
+            e.preventDefault(); e.stopPropagation(); 
+            const id = e.currentTarget.id; selectLayer(id);
+            const layer = getLayerById(id); if (!layer) return;
+            isDraggingLayer = true; artboardRect = artboard.getBoundingClientRect();
+            dragOffsetX = e.clientX - artboardRect.left - layer.x; dragOffsetY = e.clientY - artboardRect.top - layer.y;
+            document.addEventListener('mousemove', onLayerMouseMove); document.addEventListener('mouseup', onLayerMouseUp);
+        }
+        function onLayerMouseMove(e) {
+            if (!isDraggingLayer || !selectedLayerId) return;
+            const layer = getLayerById(selectedLayerId); if (!layer) return;
+            artboardRect = artboard.getBoundingClientRect(); 
+            let newX = e.clientX - artboardRect.left - dragOffsetX; let newY = e.clientY - artboardRect.top - dragOffsetY;
+            const layerHalfWidth = (layer.width * layer.scale) / 2; const layerHalfHeight = (layer.height * layer.scale) / 2;
+            newX = Math.max(-layerHalfWidth, Math.min(newX, artboard.clientWidth - layerHalfWidth)); newY = Math.max(-layerHalfHeight, Math.min(newY, artboard.clientHeight - layerHalfHeight));
+            layer.x = newX; layer.y = newY; updateLayerStyle(layer); 
+            if (isAnchorModeActive && layer.type === 'model') createOrUpdateAnchorBox();
+        }
+        function onLayerMouseUp() { isDraggingLayer = false; document.removeEventListener('mousemove', onLayerMouseMove); document.removeEventListener('mouseup', onLayerMouseUp); }
+        artboard.addEventListener('mousedown', (e) => {
+            if (isRegionModeActive) {
+                if (e.target === selectionRegionEl) { onRegionBoxDragStart(e); return; }
+                if (e.target.classList.contains('region-selection-handle')) return; 
+                const clickedLayerEl = e.target.closest('.draggable-layer');
+                if (clickedLayerEl) { const layer = getLayerById(clickedLayerEl.id); if (layer && layer.type === 'model' && selectionRegion) return; }
+                onRegionStart(e);
+            } else if (isAnchorModeActive) { 
+                if (e.target === selectionRegionEl) { onRegionBoxDragStart(e); return; }
+                if (e.target.classList.contains('region-selection-handle')) return; 
+                const clickedLayerEl = e.target.closest('.draggable-layer'); if (clickedLayerEl) return; 
+                deselectAll(); 
+            } else if (e.target === artboard) deselectAll();
+        });
+        artboard.addEventListener('dragover', (e) => { e.preventDefault(); e.stopPropagation(); artboard.classList.add('drag-over'); });
+        artboard.addEventListener('dragleave', (e) => { e.preventDefault(); e.stopPropagation(); artboard.classList.remove('drag-over'); });
+        artboard.addEventListener('drop', (e) => { e.preventDefault(); e.stopPropagation(); artboard.classList.remove('drag-over'); const files = e.dataTransfer.files; if (files.length > 0) { for (const file of files) processFileAsLayer(file, 'jewelry'); } });
+        
+        function toggleRegionMode(forceState) {
+            const newState = (forceState !== undefined) ? forceState : !isRegionModeActive;
+            isRegionModeActive = newState;
+            if (isRegionModeActive) {
+                regionalTryOnBtn.classList.add('ring-2', 'ring-indigo-500', 'bg-white', 'dark:bg-zinc-700'); artboard.style.cursor = 'crosshair'; deselectAll(); 
+                if (selectionRegion) hideSelectionRegion();
+                document.addEventListener('mousemove', onRegionDraw); document.addEventListener('mouseup', onRegionEnd);
+                if (isAnchorModeActive) toggleAnchorMode(false);
+                selectionRegionEl.style.pointerEvents = 'auto'; selectionRegionEl.style.cursor = 'move';
+            } else {
+                regionalTryOnBtn.classList.remove('ring-2', 'ring-indigo-500', 'bg-white', 'dark:bg-zinc-700'); artboard.style.cursor = 'default';
+                document.removeEventListener('mousemove', onRegionDraw); document.removeEventListener('mouseup', onRegionEnd);
+                isDraggingRegionBox = false; document.removeEventListener('mousemove', onRegionBoxDrag); document.removeEventListener('mouseup', onRegionBoxDragEnd);
+                isResizingRegion = false; document.removeEventListener('mousemove', onRegionResizeMouseMove); document.removeEventListener('mouseup', onRegionResizeMouseUp);
+                hideSelectionRegion();
+            }
+        }
+        function toggleAnchorMode(forceState) {
+            const newState = (forceState !== undefined) ? forceState : !isAnchorModeActive;
+            isAnchorModeActive = newState;
+            if (isAnchorModeActive) {
+                anchorTryOnBtn.classList.add('ring-2', 'ring-indigo-500', 'bg-white', 'dark:bg-zinc-700'); deselectAll(); 
+                if (isRegionModeActive) toggleRegionMode(false);
+                anchorBoxOffset = { x: 0, y: 0 }; createOrUpdateAnchorBox();
+                selectionRegionEl.style.pointerEvents = 'auto'; selectionRegionEl.style.cursor = 'move'; hideRegionHandles(); 
+            } else {
+                anchorTryOnBtn.classList.remove('ring-2', 'ring-indigo-500', 'bg-white', 'dark:bg-zinc-700'); hideSelectionRegion();
+            }
+        }
+        
+        // 重新绑定事件监听
+        regionalTryOnBtn.addEventListener('click', () => toggleRegionMode());
+        anchorTryOnBtn.addEventListener('click', () => toggleAnchorMode());
+
+
+        function getTopVisibleModelLayer() { for (let i = layers.length - 1; i >= 0; i--) { const layer = layers[i]; if (layer.type === 'model' && layer.isVisible) return layer; } return null; }
+        function createOrUpdateAnchorBox() {
+            const model = getTopVisibleModelLayer(); if (!model) { hideSelectionRegion(); return; }
+            const modelCenter = { x: model.x + (model.width / 2), y: model.y + (model.height / 2) };
+            const onScreenToOriginalRatio = model.originalWidth / model.width;
+            const boxBaseSize = 1024 / onScreenToOriginalRatio;
+            const currentBoxSize = boxBaseSize * model.scale;
+            if (currentBoxSize < 20) { hideSelectionRegion(); return; }
+            const scaledOffsetX = anchorBoxOffset.x * model.scale; const scaledOffsetY = anchorBoxOffset.y * model.scale;
+            const boxCenterX = modelCenter.x + scaledOffsetX; const boxCenterY = modelCenter.y + scaledOffsetY;
+            const anchorX = boxCenterX - (currentBoxSize / 2); const anchorY = boxCenterY - (currentBoxSize / 2);
+            selectionRegion = { x: anchorX, y: anchorY, width: currentBoxSize, height: currentBoxSize };
+            selectionRegionEl.style.left = `${anchorX}px`; selectionRegionEl.style.top = `${anchorY}px`;
+            selectionRegionEl.style.width = `${currentBoxSize}px`; selectionRegionEl.style.height = `${currentBoxSize}px`;
+            selectionRegionEl.style.display = 'block'; hideRegionHandles(); 
+        }
+        function hideSelectionRegion() { selectionRegion = null; selectionRegionEl.style.display = 'none'; hideRegionHandles(); }
+        function onRegionStart(e) {
+            if (!isRegionModeActive) return; 
+            e.preventDefault(); e.stopPropagation();
+            if (selectionRegion) hideSelectionRegion();
+            isDrawingRegion = true; artboardRect = artboard.getBoundingClientRect();
+            regionStartPos.x = e.clientX - artboardRect.left; regionStartPos.y = e.clientY - artboardRect.top;
+            selectionRegionEl.style.left = `${regionStartPos.x}px`; selectionRegionEl.style.top = `${regionStartPos.y}px`; selectionRegionEl.style.width = '0px'; selectionRegionEl.style.height = '0px'; selectionRegionEl.style.display = 'block';
+        }
+        function onRegionDraw(e) {
+            if (!isDrawingRegion) return;
+            e.preventDefault(); e.stopPropagation(); artboardRect = artboard.getBoundingClientRect();
+            const currentX = e.clientX - artboardRect.left; const currentY = e.clientY - artboardRect.top;
+            const dx = currentX - regionStartPos.x; const dy = currentY - regionStartPos.y;
+            const size = Math.max(Math.abs(dx), Math.abs(dy));
+            const newX = (dx >= 0) ? regionStartPos.x : regionStartPos.x - size; const newY = (dy >= 0) ? regionStartPos.y : regionStartPos.y - size;
+            selectionRegionEl.style.left = `${newX}px`; selectionRegionEl.style.top = `${newY}px`; selectionRegionEl.style.width = `${size}px`; selectionRegionEl.style.height = `${size}px`;
+        }
+        function onRegionEnd(e) {
+            if (!isDrawingRegion) return;
+            e.preventDefault(); e.stopPropagation(); isDrawingRegion = false;
+            const size = parseFloat(selectionRegionEl.style.width);
+            if (size > 10) { selectionRegion = { x: parseFloat(selectionRegionEl.style.left), y: parseFloat(selectionRegionEl.style.top), width: size, height: size }; updateRegionHandlesPosition(selectionRegion); } else { hideSelectionRegion(); }
+        }
+        function onRegionBoxDragStart(e) {
+            e.preventDefault(); e.stopPropagation(); if (!selectionRegion && !isAnchorModeActive) return; 
+            isDraggingRegionBox = true; artboardRect = artboard.getBoundingClientRect();
+            if (isRegionModeActive) { regionDragStart = { x: e.clientX, y: e.clientY, boxX: selectionRegion.x, boxY: selectionRegion.y }; } else if (isAnchorModeActive) { regionDragStart = { x: e.clientX, y: e.clientY, startOffsetX: anchorBoxOffset.x, startOffsetY: anchorBoxOffset.y }; }
+            document.addEventListener('mousemove', onRegionBoxDrag); document.addEventListener('mouseup', onRegionBoxDragEnd);
+        }
+        function onRegionBoxDrag(e) {
+            if (!isDraggingRegionBox) return;
+            e.preventDefault(); const deltaX = e.clientX - regionDragStart.x; const deltaY = e.clientY - regionDragStart.y;
+            if (isRegionModeActive) {
+                if (!selectionRegion) return;
+                let newX = regionDragStart.boxX + deltaX; let newY = regionDragStart.boxY + deltaY;
+                artboardRect = artboard.getBoundingClientRect(); 
+                newX = Math.max(0, Math.min(newX, artboard.clientWidth - selectionRegion.width)); newY = Math.max(0, Math.min(newY, artboard.clientHeight - selectionRegion.height));
+                selectionRegion.x = newX; selectionRegion.y = newY; selectionRegionEl.style.left = `${newX}px`; selectionRegionEl.style.top = `${newY}px`; updateRegionHandlesPosition(selectionRegion);
+            } else if (isAnchorModeActive) {
+                const model = getTopVisibleModelLayer(); if (!model || model.scale === 0) return; 
+                const deltaOffsetX = deltaX / model.scale; const deltaOffsetY = deltaY / model.scale;
+                anchorBoxOffset.x = regionDragStart.startOffsetX + deltaOffsetX; anchorBoxOffset.y = regionDragStart.startOffsetY + deltaOffsetY; createOrUpdateAnchorBox();
+            }
+        }
+        function onRegionBoxDragEnd(e) { if (!isDraggingRegionBox) return; e.preventDefault(); isDraggingRegionBox = false; document.removeEventListener('mousemove', onRegionBoxDrag); document.removeEventListener('mouseup', onRegionBoxDragEnd); regionDragStart = {}; }
+        function onRegionResizeHandleMouseDown(e) {
+            e.preventDefault(); e.stopPropagation(); if (!selectionRegion || !isRegionModeActive) return;
+            isResizingRegion = true; const center = { x: selectionRegion.x + selectionRegion.width / 2, y: selectionRegion.y + selectionRegion.height / 2 };
+            regionResizeState = { center }; document.addEventListener('mousemove', onRegionResizeMouseMove); document.addEventListener('mouseup', onRegionResizeMouseUp);
+        }
+        function onRegionResizeMouseMove(e) {
+            if (!isResizingRegion) return;
+            e.preventDefault(); artboardRect = artboard.getBoundingClientRect();
+            const { center } = regionResizeState; const mouseX = e.clientX - artboardRect.left; const mouseY = e.clientY - artboardRect.top;
+            const newHalfSize = Math.max(Math.abs(mouseX - center.x), Math.abs(mouseY - center.y)); let newSize = newHalfSize * 2; if (newSize < 20) newSize = 20; 
+            let newX = center.x - newHalfSize; let newY = center.y - newHalfSize;
+            const artboardWidth = artboard.clientWidth; const artboardHeight = artboard.clientHeight;
+            if (newX < 0) newX = 0; if (newY < 0) newY = 0; if (newX + newSize > artboardWidth) newSize = artboardWidth - newX; if (newY + newSize > artboardHeight) newSize = artboardHeight - newY; newSize = Math.min(newSize, artboardWidth - newX, artboardHeight - newY);
+            selectionRegion.x = newX; selectionRegion.y = newY; selectionRegion.width = newSize; selectionRegion.height = newSize;
+            selectionRegionEl.style.left = `${newX}px`; selectionRegionEl.style.top = `${newY}px`; selectionRegionEl.style.width = `${newSize}px`; selectionRegionEl.style.height = `${newSize}px`; updateRegionHandlesPosition(selectionRegion);
+        }
+        function onRegionResizeMouseUp(e) { if (!isResizingRegion) return; e.preventDefault(); isResizingRegion = false; document.removeEventListener('mousemove', onRegionResizeMouseMove); document.removeEventListener('mouseup', onRegionResizeMouseUp); }
+        
+        // --- AI 智能佩戴按钮逻辑 ---
+        document.getElementById('ai-generate-btn').addEventListener('click', async () => {
+            const modelLayers = layers.filter(l => l.type === 'model' && l.isVisible);
+            const jewelryLayers = layers.filter(l => l.type === 'jewelry' && l.isVisible);
+
+            // 检查前提条件
+            if (modelLayers.length === 0 || jewelryLayers.length === 0) {
+                const message = modelLayers.length === 0 
+                    ? "请至少添加一个模特图层并确保其可见。" 
+                    : "请至少添加一个首饰图层并确保其可见。";
+                
+                aiErrorMessage.textContent = message;
+                aiModal.classList.remove('hidden');
+                aiError.classList.remove('hidden');
+                aiLoading.classList.add('hidden');
+                aiResult.classList.add('hidden');
+                return;
+            }
+
+            aiModal.classList.remove('hidden');
+            aiLoading.classList.remove('hidden');
+            aiResult.classList.add('hidden');
+            aiError.classList.add('hidden');
+            
+            try {
+                const prompt = `
+                    你是一个专业的高级珠宝修图师。
+                    请根据提供的合成图片，将首饰（根据它们在合成图中的精确位置、大小和旋转角度）逼真地佩戴在模特身上。
+                    确保最终佩戴效果自然、高级、真实，包括：
+                    - 正确的光影、反射和材质感应。
+                    - 与模特皮肤或衣物完美融合，无边缘痕迹。
+                    - 保持模特原始的姿态、表情和背景不变。
+                    - 移除合成图中原始的首饰图层，只显示AI渲染的佩戴效果。
+                `;
+
+                let compositeImageBase64;
+
+                if (selectionRegion && selectionRegion.width > 0 && (isRegionModeActive || isAnchorModeActive)) {
+                    console.log("启动区域/锚定佩戴模式...");
+
+                    const region = selectionRegion;
+                    const canvas = document.createElement('canvas');
+                    const TARGET_RES = 1024; 
+                    canvas.width = TARGET_RES;
+                    canvas.height = TARGET_RES;
+                    const ctx = canvas.getContext('2d');
+
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, TARGET_RES, TARGET_RES);
+
+                    const exportScale = TARGET_RES / region.width;
+                    
+                    const regionCenter = { x: region.x + region.width / 2, y: region.y + region.height / 2 };
+                    
+                    const targetCenter = { x: TARGET_RES / 2, y: TARGET_RES / 2 };
+
+                    const sortedLayers = [...layers].sort((a, b) => a.zIndex - b.zIndex);
+
+                    for (const layer of sortedLayers) {
+                        if (!layer.isVisible) continue;
+                        
+                        const img = await new Promise((resolve) => {
+                            const img = new Image();
+                            img.crossOrigin = 'Anonymous';
+                            img.onload = () => resolve(img);
+                            img.onerror = () => resolve(null); 
+                            img.src = layer.src;
+                        });
+                        if (!img) continue;
+
+                        ctx.save();
+                        
+                        const layerCenter = { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+
+                        const relativeCenter = {
+                            x: layerCenter.x - regionCenter.x,
+                            y: layerCenter.y - regionCenter.y
+                        };
+                        
+                        const finalTranslate = {
+                            x: targetCenter.x + (relativeCenter.x * exportScale),
+                            y: targetCenter.y + (relativeCenter.y * exportScale)
+                        };
+
+                        ctx.translate(finalTranslate.x, finalTranslate.y);
+                        
+                        ctx.rotate(layer.rotation * Math.PI / 180);
+
+                        const finalDrawWidth = layer.width * layer.scale * exportScale;
+                        const finalDrawHeight = layer.height * layer.scale * exportScale;
+
+                        ctx.drawImage(
+                            img,
+                            -finalDrawWidth / 2,
+                            -finalDrawHeight / 2,
+                            finalDrawWidth,
+                            finalDrawHeight
+                        );
+
+                        ctx.restore();
+                    }
+                    
+                    compositeImageBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+                } else {
+                    console.log("启动全局佩戴模式...");
+                    
+                    modelLayers.sort((a, b) => b.zIndex - a.zIndex);
+                    const baseModelLayer = modelLayers[0]; 
+                    
+                    compositeImageBase64 = await generateCompositeImage(baseModelLayer);
+                }
+
+
+                const resultBase64 = await callNanoBanana(prompt, compositeImageBase64);
+
+                const imageUrl = `data:image/png;base64,${resultBase64}`;
+                aiResultImage.src = imageUrl;
+                
+                // 绑定下载链接
+                downloadAiResultBtn.href = imageUrl;
+
+                // 切换到结果显示
+                aiResult.classList.remove('hidden');
+                aiLoading.classList.add('hidden');
+
+            } catch (error) {
+                console.error("AI 智能佩戴失败:", error);
+                aiErrorMessage.textContent = error.message || "生成服务暂时不可用，请稍后重试。";
+                
+                // 切换到错误显示
+                aiError.classList.remove('hidden');
+                aiLoading.classList.add('hidden');
+            }
+        });
+
+        // 结果页面的关闭按钮
+        cancelAiResultBtn.addEventListener('click', () => {
+            aiModal.classList.add('hidden');
+        });
+        
+        document.getElementById('close-modal-btn').addEventListener('click', () => {
+            aiModal.classList.add('hidden');
+        });
+        aiModal.addEventListener('click', (e) => {
+            if (e.target === aiModal) {
+                aiModal.classList.add('hidden');
+            }
+        });
+        expandLayerPanelBtn.addEventListener('click', () => {
+            layerPanel.classList.remove('panel-hidden');
+            layerPanel.classList.add('panel-visible');
+            expandLayerPanelBtn.classList.remove('expand-btn-visible');
+            expandLayerPanelBtn.classList.add('expand-btn-hidden');
+        });
+        collapseLayerPanelBtn.addEventListener('click', () => {
+            layerPanel.classList.remove('panel-visible');
+            layerPanel.classList.add('panel-hidden');
+            expandLayerPanelBtn.classList.remove('expand-btn-hidden');
+            expandLayerPanelBtn.classList.add('expand-btn-visible');
+        });
+        document.addEventListener('keydown', (e) => {
+            if (selectedLayerId && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+                if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteLayer(selectedLayerId); }
+            }
+        });
+        
+        // 顶部菜单和模态框逻辑
+        const addModelOptionsBtn = document.getElementById('add-model-options-btn');
+        const modelOptionsMenu = document.getElementById('model-options-menu');
+        const addJewelryOptionsBtn = document.getElementById('add-jewelry-options-btn');
+        const jewelryOptionsMenu = document.getElementById('jewelry-options-menu');
+        function toggleMenu(menu) { menu.classList.toggle('hidden'); }
+        addModelOptionsBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(modelOptionsMenu); jewelryOptionsMenu.classList.add('hidden'); });
+        addJewelryOptionsBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleMenu(jewelryOptionsMenu); modelOptionsMenu.classList.add('hidden'); });
+        modelOptionsMenu.addEventListener('click', (e) => {
+            const action = e.target.dataset.action;
+            if (action === 'upload-model') uploadModelInput.click();
+            else if (action === 'generate-model') openAIGenerateImageModal('model');
+            modelOptionsMenu.classList.add('hidden');
+        });
+        jewelryOptionsMenu.addEventListener('click', (e) => {
+            const action = e.target.dataset.action;
+            if (action === 'upload-jewelry') uploadJewelryInput.click();
+            else if (action === 'generate-jewelry') openAIGenerateImageModal('jewelry');
+            jewelryOptionsMenu.classList.add('hidden');
+        });
+        uploadModelInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) processFileAsLayer(file, 'model'); e.target.value = null; });
+        uploadJewelryInput.addEventListener('change', (e) => { const file = e.target.files[0]; if (file) processFileAsLayer(file, 'jewelry'); e.target.value = null; });
+        document.getElementById('reset-btn').addEventListener('click', resetArtboard);
+
+        function openAIGenerateImageModal(type) {
+            currentAIGenerationType = type;
+            aiImageModalTitle.textContent = type === 'model' ? 'AI 模特生成' : 'AI 珠宝生成';
+            aiPromptInput.value = ''; aiGeneratedImagePreview.src = '';
+            aiImageLoading.classList.add('hidden'); aiImageResultContainer.classList.add('hidden'); aiImageError.classList.add('hidden');
+            aiImageModal.classList.remove('hidden');
+            if (type === 'model') aiPromptInput.placeholder = "例如：'一位年轻的亚洲女性，优雅微笑，穿着黑色晚礼服，站在柔和的影棚光线下，面部清晰，正视前方...'";
+            else aiPromptInput.placeholder = "例如：'一条精致的白金钻石项链，镶嵌着一颗蓝宝石吊坠，高清摄影，透明背景，闪耀的光泽...'";
+        }
+        closeAiImageModalBtn.addEventListener('click', () => aiImageModal.classList.add('hidden'));
+        aiImageModal.addEventListener('click', (e) => { if (e.target === aiImageModal) aiImageModal.classList.add('hidden'); });
+        generateAiImageBtn.addEventListener('click', async () => {
+            const prompt = aiPromptInput.value.trim();
+            if (!prompt) { aiImageErrorMessage.textContent = "请描述您想要生成的画面。"; aiImageError.classList.remove('hidden'); return; }
+            aiGeneratedImagePreview.src = ''; aiImageResultContainer.classList.add('hidden'); aiImageError.classList.add('hidden'); aiImageLoading.classList.remove('hidden'); generateAiImageBtn.disabled = true;
+            try {
+                let finalPrompt = prompt;
+                if (currentAIGenerationType === 'jewelry' && !prompt.toLowerCase().includes('transparent background')) finalPrompt += ", transparent background"; 
+                const resultBase64 = await callNanoBanana(finalPrompt);
+                aiGeneratedImagePreview.src = `data:image/png;base64,${resultBase64}`;
+                aiImageResultContainer.classList.remove('hidden');
+            } catch (error) { console.error("AI 生成图片失败:", error); aiImageErrorMessage.textContent = error.message || "生成服务暂时不可用，请稍后重试。"; aiImageError.classList.remove('hidden'); } finally { aiImageLoading.classList.add('hidden'); generateAiImageBtn.disabled = false; }
+        });
+        addAiImageToArtboardBtn.addEventListener('click', () => { const imageUrl = aiGeneratedImagePreview.src; if (imageUrl) { addLayer(imageUrl, currentAIGenerationType); aiImageModal.classList.add('hidden'); } });
+        cancelAiImageBtn.addEventListener('click', () => { aiImageModal.classList.add('hidden'); });
+
+        function processFileAsLayer(file, type) {
+            if (file && file.type.startsWith('image/')) {
+                const reader = new FileReader();
+                reader.onload = (event) => addLayer(event.target.result, type);
+                reader.readAsDataURL(file);
+            } else console.warn("跳过非图片文件。");
+        }
+        
+        function onRotateHandleMouseDown(e) {
+            e.preventDefault(); e.stopPropagation(); if (!selectedLayerId) return;
+            isRotating = true; const layer = getLayerById(selectedLayerId); artboardRect = artboard.getBoundingClientRect();
+            const center = { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+            const startAngle = Math.atan2(e.clientY - artboardRect.top - center.y, e.clientX - artboardRect.left - center.x);
+            handleDragState = { layer, center, startAngle, startLayerRotation: layer.rotation };
+        }
+        function onResizeHandleMouseDown(e) {
+            e.preventDefault(); e.stopPropagation(); if (!selectedLayerId) return;
+            isResizing = true; const layer = getLayerById(selectedLayerId); artboardRect = artboard.getBoundingClientRect();
+            const center = { x: layer.x + layer.width / 2, y: layer.y + layer.height / 2 };
+            const startDistance = Math.hypot(e.clientX - artboardRect.left - center.x, e.clientY - artboardRect.top - center.y);
+            const handleType = e.target.dataset.handleType;
+            let originalDistance;
+            if (handleType === 'tl' || handleType === 'tr' || handleType === 'br' || handleType === 'bl') originalDistance = Math.hypot(layer.width / 2, layer.height / 2); else originalDistance = startDistance / layer.scale; 
+            handleDragState = { layer, center, startDistance, startLayerScale: layer.scale, originalDistance, handleType };
+        }
+        function onHandleMouseMove(e) {
+            if (!isRotating && !isResizing) return;
+            e.preventDefault(); e.stopPropagation();
+            const { layer, center } = handleDragState; artboardRect = artboard.getBoundingClientRect(); 
+            const mousePos = { x: e.clientX - artboardRect.left, y: e.clientY - artboardRect.top };
+            if (isRotating) {
+                const currentAngle = Math.atan2(mousePos.y - center.y, mousePos.x - center.x);
+                const deltaAngle = currentAngle - handleDragState.startAngle;
+                let newRotation = handleDragState.startLayerRotation + deltaAngle * (180 / Math.PI);
+                layer.rotation = newRotation % 360; updateLayerStyle(layer);
+            } else if (isResizing) {
+                const currentDistance = Math.hypot(mousePos.x - center.x, mousePos.y - center.y);
+                let scaleRatio = currentDistance / handleDragState.startDistance; let newScale = handleDragState.startLayerScale * scaleRatio;
+                if (newScale < 0.05) newScale = 0.05; layer.scale = newScale; updateLayerStyle(layer); handleDragState.startDistance = currentDistance; handleDragState.startLayerScale = newScale;
+            }
+            if (isAnchorModeActive && layer && layer.type === 'model') createOrUpdateAnchorBox();
+        }
+        function onHandleMouseUp(e) { if (isRotating || isResizing) { e.preventDefault(); e.stopPropagation(); } isRotating = false; isResizing = false; handleDragState = {}; }
+
+
+        initHandles();
+        initRegionHandles();
+
+    </script>
+</body>
+</html>
