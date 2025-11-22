@@ -15,7 +15,7 @@ B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
   ![Image 1](nano-banana-base/main-page.png)
 
   Gemini在线版：需要在Gemini环境下运行
-  - [Gemini在线版](https://gemini.google.com/share/b5ef14f1962e)
+  - [Gemini在线版](https://gemini.google.com/share/4ce52840bc5e)
 
 - ### 2.即梦无限多帧画板（更新中）
   ![Image 2](nano-banana-base/jimeng-canvas.png)
