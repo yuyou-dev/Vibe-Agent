@@ -20,7 +20,9 @@ B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
 - ### 2.即梦无限多帧画板（更新中）
   ![Image 2](nano-banana-base/jimeng-canvas.png)
 
-- ### 3.珠宝首饰佩戴大师（即将更新）
+- ### 3.珠宝首饰佩戴大师v1
    ![Image 3](Jewerly_Design/wearing_board.png)
  - [Gemini在线版](https://gemini.google.com/share/f2597097543b)
 
+- ### 4.NanoBananaPro神级应用：表情包大师
+- [aistudio工程仓库](https://github.com/yuyou-dev/gif-creator)
