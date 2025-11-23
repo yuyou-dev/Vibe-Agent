@@ -25,4 +25,5 @@ B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
  - [Gemini在线版](https://gemini.google.com/share/f2597097543b)
 
 - ### 4.NanoBananaPro神级应用：表情包大师
+  ![Image 4](gif-creator.png)
 - [aistudio工程仓库](https://github.com/yuyou-dev/gif-creator)
