@@ -31,4 +31,4 @@ B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
 
 - ### 5.NanoBananaPro神级应用2：影视分镜终极解决方案
   ![Image 5](screen-master.png)
-- [aistudio工程仓库](https://github.com/yuyou-dev/screen-master)
+- [aistudio工程仓库](https://ai.studio/apps/drive/1ZfAW7_gZz8T7X73W82p3ZHUPLkenU7se)
