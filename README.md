@@ -17,17 +17,14 @@ B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
   Gemini在线版：需要在Gemini环境下运行
   - [Gemini在线版](https://gemini.google.com/share/4ce52840bc5e)
 
-- ### 2.即梦无限多帧画板（更新中）
-  ![Image 2](nano-banana-base/jimeng-canvas.png)
-
-- ### 3.珠宝首饰佩戴大师4k版
-   ![Image 3](Jewerly_Design/wearing_board.png)
+- ### 2.珠宝首饰佩戴大师4k版
+   ![Image 2](Jewerly_Design/wearing_board.png)
  - [Gemini在线版](https://gemini.google.com/share/221db03bda79)
 
-- ### 4.NanoBananaPro神级应用：表情包大师
-  ![Image 4](gif-creator.png)
+- ### 3.NanoBananaPro神级应用：表情包大师
+  ![Image 3](gif-creator.png)
 - [aistudio工程仓库](https://ai.studio/apps/drive/1gq6lc7EltuPS9Im5cZME-zTOi0lhNN7C?fullscreenApplet=true)
 
-- ### 5.NanoBananaPro神级应用2：影视分镜终极解决方案
-  ![Image 5](screen-master.png)
+- ### 4.NanoBananaPro神级应用2：影视分镜终极解决方案
+  ![Image 4](screen-master.png)
 - [aistudio工程仓库](https://ai.studio/apps/drive/1ZfAW7_gZz8T7X73W82p3ZHUPLkenU7se)
