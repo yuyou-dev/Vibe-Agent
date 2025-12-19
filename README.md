@@ -11,6 +11,11 @@ B站课程专栏：[VibeAgent](https://www.bilibili.com/cheese/play/ss411001493)
 ## Nano Banana Base
 运行于Gemini生态，原生调用Nana Banana图片引擎，可视化，可自定义功能模块的画布Agent
 
+- ### 0.NanoBananaPro神级应用：影视分镜工作台Pro
+  ![Image 5](frame-2.png)
+- [aistudio工程仓库](https://ai.studio/apps/drive/1fq5xKfZwJ2UAuHHry_L1G65MIvN_dHGk)
+
+
 - ### 1.剧本大师(frame_master.html)
   ![Image 1](nano-banana-base/main-page.png)
 
